@@ -1,0 +1,16 @@
+# Progress report
+
+So far the plan for this project is to do the following:
+- Sparsify a CNN (EfficientNetV2S in our case) using some arbitrary scheme.
+- Write a Conv2D operator in tflite for RISC-V (using P and V extensions potentially)
+- Modify the previous 2 points to work better with each other
+
+## Week 1:
+- Read a bunch of papers
+- Installed a bunch of BS (cuda doesn't play very well with Optimus and arch :/)
+- Tested installation with a MNIST classifier
+- Train EfficientNetV2S on CIFAR-100: We will hopefully use ImageNet later, but since the validation dataset for ImageNet is nearly 100GB it's more efficient to develop the method with CIFAR-100.
+    - We are using transfer learning from the ImageNet model, with a bunch of fine-tuning (4 steps of increasing the size of the trainable model and reducing LR), total accuracy is 75% (acceptable for CIFAR, not SOTA)
+    - Images upscaled to 224x224 for better parity with ImageNet models
+    - Also tested ResNet and MobileNetV3, but the accuracy was worse
+
