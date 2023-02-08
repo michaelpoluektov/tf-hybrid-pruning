@@ -1,9 +1,10 @@
 # Progress report
 
 So far the plan for this project is to do the following:
-- Sparsify a CNN (EfficientNetV2S in our case) using some arbitrary scheme.
-- Write a Conv2D operator in tflite for RISC-V (using P and V extensions potentially)
-- Modify the previous 2 points to work better with each other
+- Sparsify a CNN (EfficientNetV2S in our case) using some arbitrary scheme. (weeks 1-3)
+- Write a Conv2D operator in tflite for RISC-V (using P and V extensions potentially) (weeks 4-6)
+- Modify the previous 2 points to work better with each other (weeks 7-8)
+- Report (week 9)
 
 ## Week 1:
 - Read a bunch of papers
@@ -13,4 +14,22 @@ So far the plan for this project is to do the following:
     - We are using transfer learning from the ImageNet model, with a bunch of fine-tuning (4 steps of increasing the size of the trainable model and reducing LR), total accuracy is 75% (acceptable for CIFAR, not SOTA)
     - Images upscaled to 224x224 for better parity with ImageNet models
     - Also tested ResNet and MobileNetV3, but the accuracy was worse
+
+TODO: Magnitude pruning, correlation pruning
+
+## Week 2:
+
+TODO: Activation merging, quantization
+
+## Week 3:
+
+TODO: Report on weeks 1-2, adapt to ResNet-50 on ImageNet instead of EfficientNetV2S on CIFAR-100. What is the minimum amount of data needed for a comparable parameter efficiency?
+
+## Weeks 4-5:
+
+TOOD: Convert to tflite, run on RISC-V processor, improve the Conv2D operation for sparse networks
+
+## Week 6:
+
+TODO: Benchmarking, write-up of weeks 3-5
 
