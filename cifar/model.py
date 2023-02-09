@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+
 def get_model(size):
     base_model = tf.keras.applications.efficientnet_v2.EfficientNetV2S(
         weights="imagenet",

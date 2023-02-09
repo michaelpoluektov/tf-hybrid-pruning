@@ -1,22 +1,12 @@
 import tensorflow as tf
 import numpy as np
 from model import get_model
-
-(x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar100.load_data()
-
-y_train = tf.keras.utils.to_categorical(y_train, 100)
-y_test = tf.keras.utils.to_categorical(y_test, 100)
+from dataset import get_dataset
 
 SIZE = 224
 BATCH_SIZE = 16
-EPOCHS = 6
+EPOCHS = 5
 
-data_augmentation = tf.keras.Sequential(
-    [
-        tf.keras.layers.RandomFlip("horizontal"),
-        tf.keras.layers.RandomRotation(0.2),
-    ]
-)
 
 learning_rate_reduction = tf.keras.callbacks.ReduceLROnPlateau(
     monitor="val_loss", patience=3, verbose=1, factor=0.5, min_lr=1e-6
@@ -28,21 +18,10 @@ ckpt_cb = tf.keras.callbacks.ModelCheckpoint(
 )
 
 
+train_dataset = get_dataset(True, SIZE, EPOCHS, BATCH_SIZE)
+test_dataset = get_dataset(False, SIZE, 1, BATCH_SIZE)
+
 base_model, model = get_model(SIZE)
-
-def get_dataset(x, y, r=True):
-    return (
-        tf.data.Dataset.from_tensor_slices((x, y))
-        .batch(BATCH_SIZE)
-        .map(lambda x, y: (tf.image.resize(x, [SIZE, SIZE]), y))
-        .map(lambda x, y: (data_augmentation(x) if r else x, y))
-        .prefetch(tf.data.AUTOTUNE)
-        .repeat(1 if not r else EPOCHS)
-    )
-
-
-train_dataset = get_dataset(x_train, y_train)
-test_dataset = get_dataset(x_test, y_test, False)
 
 
 def compile_and_train(m, epochs, lr):
@@ -51,7 +30,7 @@ def compile_and_train(m, epochs, lr):
     m.fit(
         train_dataset,
         epochs=epochs,
-        steps_per_epoch=len(x_train) // BATCH_SIZE,
+        steps_per_epoch=len(train_dataset) // EPOCHS,
         validation_data=test_dataset,
         callbacks=[learning_rate_reduction, ckpt_cb],
     )
@@ -65,6 +44,6 @@ for li, ri in zip(l, r):
     for layer in base_model.layers[-li:]:
         if layer.__class__.__name__.lower() != "batchnormalization":
             layer.trainable = True
-    model = compile_and_train(model, 5, ri)
+    model = compile_and_train(model, EPOCHS, ri)
 
 model.save_weights(f"model{SIZE}.ckpt")
