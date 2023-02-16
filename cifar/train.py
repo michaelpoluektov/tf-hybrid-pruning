@@ -3,7 +3,7 @@ import numpy as np
 from model import get_model
 from dataset import get_dataset
 
-SIZE = 224
+SIZE = 160
 BATCH_SIZE = 16
 EPOCHS = 5
 
