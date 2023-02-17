@@ -12,6 +12,7 @@ data_augmentation = tf.keras.Sequential(
     ]
 )
 
+
 def _get_dataset(is_train, size, epochs, batch_size, xy):
     return (
         tf.data.Dataset.from_tensor_slices(xy)
@@ -24,7 +25,6 @@ def _get_dataset(is_train, size, epochs, batch_size, xy):
 
 
 def get_dataset(is_train, size, epochs, batch_size, split=False):
-
     xy = (x_train if is_train else x_test, y_train if is_train else y_test)
     if split:
         half = len(xy[0]) // 2
