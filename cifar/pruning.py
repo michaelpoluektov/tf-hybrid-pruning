@@ -1,4 +1,3 @@
-
 from utils import prune_all
 import tensorflow as tf
 from model import get_model
@@ -18,4 +17,3 @@ conv_idx = [
 ]
 
 prune_all(model, conv_idx, test_ds, val_ds)
-
