@@ -1,9 +1,21 @@
 import os
+from dataclasses import dataclass
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import tensorflow as tf
 import numpy as np
 import tensorflow_probability as tfp
 from tqdm import tqdm
+
+
+@dataclass
+class LayerSpecs:
+    base_accuracy: float
+    t_min: int = 0
+    t_cur: int = 50
+    t_max: int = 100
+    best_score: int = 0
+    best_sp: int = 0
+    min_cutoff: int = 0
 
 
 def apply_mask(out, mask, weights):
@@ -76,30 +88,34 @@ def prune_all(model, conv_idx, test_ds, val_ds, max_loss=0.2):
     losses_per_layer = get_weights(conv_idx, base_model) * max_loss
     pbar = tqdm(total=len(losses_per_layer))
     for l, i in zip(losses_per_layer, conv_idx):
-        best_score, best_sp, min_cutoff = 0, 0, 0
-        t_min, t_cur, t_max = 0, 50, 100
         m = tf.keras.Model(inputs=base_model.input, outputs=base_model.layers[i].output)
         activations = get_activations(m, 50, test_ds)
         means = tf.math.reduce_mean(activations, 0)
         abs_means = tf.math.reduce_mean(tf.math.abs(activations), 0)
         model.compile(loss="categorical_crossentropy", metrics=["accuracy"])
-        _, base_accuracy = model.evaluate(test_ds, verbose=0)
-        pbar.write(f"BASE = {base_accuracy}")
-        while t_max - t_min > 100 / 2**6:
-            cutoff = tfp.stats.percentile(abs_means, t_cur)
+        s = LayerSpecs(base_accuracy = model.evaluate(test_ds, verbose=0)[1])
+        pbar.write(f"BASE = {s.base_accuracy:.5f}, maximum accuracy loss: {l:.5f}")
+        while s.t_max - s.t_min > 100 / 2**6:
+            cutoff = tfp.stats.percentile(abs_means, s.t_cur)
             if not cutoff == 0:
                 set_const(base_model.layers[i], abs_means < cutoff, None, prune_out)
                 model.compile(loss="categorical_crossentropy", metrics=["accuracy"])
                 _, out_accuracy = model.evaluate(test_ds, verbose=0)
             else:
-                out_accuracy = base_accuracy
-            if out_accuracy >= base_accuracy - 1e-3:
-                t_min = t_cur
-                min_cutoff = cutoff
+                out_accuracy = s.base_accuracy
+            score = get_score(out_accuracy-s.base_accuracy, s.t_cur/100, l)
+            pbar.write(f"Accuracy: {out_accuracy:.5f}, threshold: {s.t_cur}%, score: {score:.5f}", end=" ")
+            if score >= 0:
+                if score > s.best_score:
+                    s.best_score = score
+                    s.best_sp = s.t_cur
+                s.t_min = s.t_cur
+                s.min_cutoff = cutoff
+                pbar.write("(success)")
             else:
-                t_max = t_cur
-            t_cur = (t_max - t_min) / 2 + t_min
-            pbar.write(f"Accuracy: {out_accuracy:.5f}, threshold: {t_cur}%")
-        pbar.write(f"Threshold: {min_cutoff:.5f} ({t_min}%)")
+                s.t_max = s.t_cur
+                pbar.write("(fail)")
+            s.t_cur = (s.t_max - s.t_min) / 2 + s.t_min
+        pbar.write(f"Best score: {s.best_score:.5f} ({s.best_sp}%)")
         pbar.update(1)
-        set_const(base_model.layers[i], abs_means < min_cutoff, None, prune_out)
+        set_const(base_model.layers[i], abs_means < s.best_sp, None, prune_out)
