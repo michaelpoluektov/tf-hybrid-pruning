@@ -4,6 +4,7 @@ from model import get_model
 from dataset import get_dataset
 import tensorflow_probability as tfp
 from tensorflow.keras import mixed_precision
+import pickle
 
 mixed_precision.set_global_policy("mixed_float16")
 
@@ -16,4 +17,6 @@ conv_idx = [
     i for i, l in enumerate(base_model.layers) if isinstance(l, tf.keras.layers.Conv2D)
 ]
 
-prune_all(model, conv_idx, test_ds, val_ds)
+specs_list = prune_all(model, conv_idx, test_ds, val_ds)
+with open("specs_list.pickle", "wb") as h:
+    pickle.dump(specs_list, h)

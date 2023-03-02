@@ -14,7 +14,10 @@ class LayerSpecs:
     base_accuracy: float
     best_score: int = 0
     best_sp: int = 0
+    best_cutoff: float = 0.0
     min_cutoff: int = 0
+    mask: tf.Tensor = None
+    bias: tf.Tensor = None
 
 
 def apply_mask(out: tf.Tensor, mask: tf.Tensor, weights: tf.Tensor) -> tf.Tensor:
@@ -45,8 +48,7 @@ def set_const(
     if not "partial" in layer.name:
         layer.default_call = layer.call
         layer._name = f"partial_{layer.name}"
-    layer._mask = mask
-    layer.call = call_wrapper(layer.default_call, layer._mask, weights, pruning_func)
+    layer.call = call_wrapper(layer.default_call, mask, weights, pruning_func)
 
 
 def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
@@ -96,7 +98,6 @@ def search_factors(
     func: Callable,
     test_ds: tf.data.Dataset,
     importance_t: tf.Tensor,
-    mean_t: tf.Tensor,
     max_loss: float,
     pbar: tqdm,
 ) -> LayerSpecs:
@@ -105,7 +106,7 @@ def search_factors(
     while t_max - t_min > 100 / 2**6:
         cutoff = tfp.stats.percentile(importance_t, t_cur)
         if not cutoff == 0:
-            set_const(base_model.layers[layer_id], importance_t < cutoff, None, func)
+            set_const(base_model.layers[layer_id], importance_t < cutoff, s.weights, func)
             model.compile(loss="categorical_crossentropy", metrics=["accuracy"])
             _, out_accuracy = model.evaluate(test_ds, verbose=0)
         else:
@@ -118,6 +119,7 @@ def search_factors(
         if score >= 0:
             if score > specs.best_score:
                 specs.best_score = score
+                specs.best_cutoff = cutoff
                 specs.best_sp = t_cur
             t_min = t_cur
             specs.min_cutoff = cutoff
@@ -141,18 +143,29 @@ def prune_all(
     out_sparsities = []
     losses_per_layer = get_weights(conv_idx, base_model) * max_loss
     pbar = tqdm(total=len(losses_per_layer))
+    specs_list = []
     for l, i in zip(losses_per_layer, conv_idx):
         m = tf.keras.Model(inputs=base_model.input, outputs=base_model.layers[i].output)
         activations = get_activations(m, 50, test_ds)
         means = tf.math.reduce_mean(activations, 0)
         abs_means = tf.math.reduce_mean(tf.math.abs(activations), 0)
         model.compile(loss="categorical_crossentropy", metrics=["accuracy"])
-        s = LayerSpecs(base_accuracy=model.evaluate(test_ds, verbose=0)[1])
+        s = LayerSpecs(base_accuracy=model.evaluate(test_ds, verbose=0, bias=base_model.layers[i].bias)[1])
         pbar.write(f"BASE = {s.base_accuracy:.5f}, maximum accuracy loss: {l:.5f}")
         # prune activations
-        s = search_factors(model, i, s, prune_out, test_ds, abs_means, means, l, pbar)
+        s = search_factors(model, i, s, prune_out, test_ds, abs_means, l, pbar)
+        # set unpruned activations to mean
+
+        # prune in activations
+
+        # set unpruned in activations to mean then propagate up to the mask?
+
+        # prune weights
+
         pbar.write(
             f"Best score (activation pruning): {s.best_score:.5f} ({s.best_sp}%)"
         )
         pbar.update(1)
-        set_const(base_model.layers[i], abs_means < s.best_sp, None, prune_out)
+        set_const(base_model.layers[i], abs_means < s.best_cutoff, None, prune_out)
+        specs_list.append(s)
+    return specs_list
