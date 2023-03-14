@@ -1,4 +1,3 @@
-
 import tensorflow as tf
 from tensorflow.keras.utils import register_keras_serializable
 from tensorflow.keras.layers import Layer, Conv2D
