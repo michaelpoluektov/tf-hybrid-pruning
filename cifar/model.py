@@ -1,4 +1,5 @@
 import tensorflow as tf
+from sparse_conv2d import SparseConv2D, clone_function
 
 
 def get_model(size):
@@ -9,6 +10,7 @@ def get_model(size):
         include_preprocessing=True,
     )
     base_model.trainable = False
+    base_model = tf.keras.models.clone_model(base_model, clone_function=clone_function)
     inputs = tf.keras.Input(shape=(size, size, 3))
     x = base_model(inputs, training=False)
     x = tf.keras.layers.GlobalAveragePooling2D()(x)

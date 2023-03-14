@@ -7,62 +7,6 @@ import tensorflow as tf
 import numpy as np
 import tensorflow_probability as tfp
 from tqdm import tqdm
-from tensorflow.keras.utils import register_keras_serializable
-from tensorflow.keras.layers import Layer, Conv2D
-
-
-@register_keras_serializable()
-class SparseConv2D(tf.keras.layers.Conv2D):
-    def __init__(self, in_mask=1, out_mask=1, in_threshold=0, **kwargs):
-        super().__init__(**kwargs)
-        self.in_mask = in_mask
-        self.out_mask = out_mask
-        self.in_threshold = in_threshold
-
-    def call(self, inputs):
-        masked_inputs = (
-            tf.dtypes.cast(
-                tf.math.abs(inputs) > self.in_threshold,
-                tf.keras.mixed_precision.global_policy().compute_dtype,
-            )
-            * inputs
-            * self.in_mask
-        )
-        convolved = super().call(masked_inputs)
-        masked_outputs = convolved * self.out_mask
-        return masked_outputs
-
-    def get_config(self):
-        config = super().get_config()
-        config["in_mask"] = self.in_mask
-        config["out_mask"] = self.out_mask
-        config["in_threshold"] = self.in_threshold
-        return config
-
-    @classmethod
-    def from_config(cls, config):
-        if "in_mask" in config and "out_mask" in config and "in_threshold" in config:
-            in_mask = config["in_mask"]
-            out_mask = config["out_mask"]
-            in_threshold = config["in_threshold"]
-            config.pop("in_mask")
-            config.pop("out_mask")
-            config.pop("in_threshold")
-        else:
-            in_mask = 1
-            out_mask = 1
-            in_threshold = 0
-        layer = cls(
-            in_mask=in_mask, out_mask=out_mask, in_threshold=in_threshold, **config
-        )
-        return layer
-
-
-def clone_function(layer):
-    if isinstance(layer, Conv2D):
-        return SparseConv2D.from_config(layer.get_config())
-    else:
-        return layer.__class__.from_config(layer.get_config())
 
 
 def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
