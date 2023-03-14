@@ -1,11 +1,13 @@
 import os
 from typing import Callable
 from dataclasses import dataclass
+from sparse_conv2d import SparseConv2D
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
 import numpy as np
 import tensorflow_probability as tfp
+from tensorflow.keras.mixed_precision import global_policy
 from tqdm import tqdm
 
 
@@ -55,6 +57,20 @@ def copy_model(model):
     return copy_model
 
 
+def expand_layer(layer):
+    if not isinstance(layer, SparseConv2D):
+        raise AttributeError("Input must be a SparseConv2D layer.")
+    l.in_mask = tf.ones(l.input_shape[1:], dtype=global_policy().compute_dtype)
+    l.out_mask = tf.ones(l.output_shape[1:], dtype=global_policy().compute_dtype)
+
+
+def shrink_layer(layer):
+    if not isinstance(layer, SparseConv2D):
+        raise AttributeError("Input must be a SparseConv2D layer.")
+    l.in_mask = 1
+    l.out_mask = 1
+
+
 def copy_layer(layer) -> tf.keras.layers.Layer:
     config = layer.get_config()
     weights = layer.get_weights()
@@ -72,7 +88,10 @@ def propagate_constants(model, layer_id, input_constants):
     if model.layers[layer_id].bias:
         layer2 = copy_layer(model.layers[layer_id])
         layer2.bias = None
-        return layer2(input_constants)
+        outputs = layer2(input_constants)
+        model.layers[layer_id].bias += outputs
+    else:
+        raise NotImplementedError("Haven't done it for layer without bias yet.")
 
 
 def prune_layer(model, layer_id, max_loss, pbar, test_ds):
