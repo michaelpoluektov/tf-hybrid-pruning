@@ -8,7 +8,13 @@ import tensorflow as tf
 import numpy as np
 import tensorflow_probability as tfp
 from tensorflow.keras.mixed_precision import global_policy
-from tensorflow.keras.layers import Multiply, Add, Dropout, Activation, BatchNormalization
+from tensorflow.keras.layers import (
+    Multiply,
+    Add,
+    Dropout,
+    Activation,
+    BatchNormalization,
+)
 from tqdm import tqdm
 
 
@@ -62,7 +68,9 @@ def expand_layer(layer):
     if not isinstance(layer, SparseConv2D):
         raise AttributeError("Input must be a SparseConv2D layer.")
     layer.in_mask = tf.ones(layer.input_shape[1:], dtype=global_policy().compute_dtype)
-    layer.out_mask = tf.ones(layer.output_shape[1:], dtype=global_policy().compute_dtype)
+    layer.out_mask = tf.ones(
+        layer.output_shape[1:], dtype=global_policy().compute_dtype
+    )
 
 
 def shrink_layer(layer):
@@ -92,7 +100,11 @@ def propagate_constants(layer, input_constants):
         layer2.use_bias = False
         outputs = layer2(input_constants)
         if layer.bias is not None:
-            layer.bias = tf.cast(layer.bias + tf.cast(tf.reshape(outputs, layer.bias.shape), layer.bias.dtype), global_policy().compute_dtype)
+            layer.bias = tf.cast(
+                layer.bias
+                + tf.cast(tf.reshape(outputs, layer.bias.shape), layer.bias.dtype),
+                global_policy().compute_dtype,
+            )
         else:
             for n in layer.outbound_nodes:
                 propagate_constants(n.outbound_layer, outputs)
