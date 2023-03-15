@@ -8,6 +8,7 @@ import tensorflow as tf
 import numpy as np
 import tensorflow_probability as tfp
 from tensorflow.keras.mixed_precision import global_policy
+from tensorflow.keras.layers import Multiply, Add, Dropout, Activation, BatchNormalization
 from tqdm import tqdm
 
 
@@ -60,15 +61,15 @@ def copy_model(model):
 def expand_layer(layer):
     if not isinstance(layer, SparseConv2D):
         raise AttributeError("Input must be a SparseConv2D layer.")
-    l.in_mask = tf.ones(l.input_shape[1:], dtype=global_policy().compute_dtype)
-    l.out_mask = tf.ones(l.output_shape[1:], dtype=global_policy().compute_dtype)
+    layer.in_mask = tf.ones(layer.input_shape[1:], dtype=global_policy().compute_dtype)
+    layer.out_mask = tf.ones(layer.output_shape[1:], dtype=global_policy().compute_dtype)
 
 
 def shrink_layer(layer):
     if not isinstance(layer, SparseConv2D):
         raise AttributeError("Input must be a SparseConv2D layer.")
-    l.in_mask = 1
-    l.out_mask = 1
+    layer.in_mask = 1
+    layer.out_mask = 1
 
 
 def copy_layer(layer) -> tf.keras.layers.Layer:
@@ -76,7 +77,7 @@ def copy_layer(layer) -> tf.keras.layers.Layer:
     weights = layer.get_weights()
     layer2 = type(layer).from_config(config)
     layer2.build(layer.input_shape)
-    layer2.set_weigthts(weights)
+    layer2.set_weights(weights)
     return layer2
 
 
@@ -84,14 +85,29 @@ def get_pruned_accuracy(model, layer_id, threshold, test_ds):
     model_2 = copy_model(model)
 
 
-def propagate_constants(model, layer_id, input_constants):
-    if model.layers[layer_id].bias:
-        layer2 = copy_layer(model.layers[layer_id])
+def propagate_constants(layer, input_constants):
+    if isinstance(layer, SparseConv2D):
+        layer2 = copy_layer(layer)
         layer2.bias = None
+        layer2.use_bias = False
         outputs = layer2(input_constants)
-        model.layers[layer_id].bias += outputs
+        if layer.bias is not None:
+            layer.bias = tf.cast(layer.bias + tf.cast(tf.reshape(outputs, layer.bias.shape), layer.bias.dtype), global_policy().compute_dtype)
+        else:
+            for n in layer.outbound_nodes:
+                propagate_constants(n.outbound_layer, outputs)
+    elif isinstance(layer, BatchNormalization):
+        pass
+    elif isinstance(layer, Activation):
+        pass
+    elif isinstance(layer, Dropout):
+        pass
+    elif isinstance(layer, Add):
+        pass
+    elif isinstance(layer, Multiply):
+        pass
     else:
-        raise NotImplementedError("Haven't done it for layer without bias yet.")
+        raise NotImplementedError(f"Layer {layer.__class__} is not supported.")
 
 
 def prune_layer(model, layer_id, max_loss, pbar, test_ds):

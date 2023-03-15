@@ -29,23 +29,31 @@ class SparseConv2D(Conv2D):
         config = super().get_config()
         if hasattr(self.in_mask, "numpy"):
             config["in_mask"] = self.in_mask.numpy()
+        else:
+            config["in_mask"] = self.in_mask
         if hasattr(self.out_mask, "numpy"):
             config["out_mask"] = self.out_mask.numpy()
+        else:
+            config["out_mask"] = self.out_mask
         config["in_threshold"] = self.in_threshold
         return config
 
     @classmethod
     def from_config(cls, config):
-        if "in_mask" in config and "out_mask" in config and "in_threshold" in config:
+        if "in_mask" in config:
             in_mask = tf.constant(config["in_mask"], global_policy().compute_dtype)
-            out_mask = tf.constant(config["out_mask"], global_policy().compute_dtype)
-            in_threshold = config["in_threshold"]
             config.pop("in_mask")
-            config.pop("out_mask")
-            config.pop("in_threshold")
         else:
             in_mask = 1
+        if "out_mask" in config:
+            out_mask = tf.constant(config["out_mask"], global_policy().compute_dtype)
+            config.pop("out_mask")
+        else:
             out_mask = 1
+        if "in_threshold" in config:
+            in_threshold = config["in_threshold"]
+            config.pop("in_threshold")
+        else:
             in_threshold = 0
         layer = cls(
             in_mask=in_mask, out_mask=out_mask, in_threshold=in_threshold, **config
