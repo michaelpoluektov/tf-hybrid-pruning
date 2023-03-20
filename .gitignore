@@ -132,3 +132,4 @@ dmypy.json
 *checkpoint*
 *.ckpt*
 *.h5
+model.png
