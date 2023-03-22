@@ -90,14 +90,17 @@ def copy_layer(layer) -> tf.keras.layers.Layer:
 
 
 def get_pruned_accuracy(model, layer_id, threshold, test_ds):
+    # WIP
     model_2 = copy_model(model)
 
 
 def propagate_constants(layer, input_constants):
+    # WIP
     if isinstance(layer, SparseConv2D):
         layer2 = copy_layer(layer)
         layer2.bias = None
         layer2.use_bias = False
+        layer2.activation = None
         outputs = layer2(input_constants)
         if layer.bias is not None:
             layer.bias = tf.cast(
