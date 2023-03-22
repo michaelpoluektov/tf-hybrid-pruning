@@ -103,11 +103,12 @@ def propagate_constants(layer, input_constants):
         layer2.activation = None
         outputs = layer2(input_constants)
         if layer.bias is not None:
-            layer.bias = tf.cast(
+            bias = tf.cast(
                 layer.bias
                 + tf.cast(tf.reshape(outputs, layer.bias.shape), layer.bias.dtype),
                 global_policy().compute_dtype,
             )
+            layer.set_weights(layer.get_weights()[:-1] + [bias])
         else:
             for n in layer.outbound_nodes:
                 propagate_constants(n.outbound_layer, outputs)
