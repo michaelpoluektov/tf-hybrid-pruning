@@ -9,8 +9,7 @@ import pickle
 mixed_precision.set_global_policy("mixed_float16")
 
 SIZE = 224
-base_model, model = get_resnet(SIZE)
-model.load_weights(f"model/model{SIZE}.ckpt")
+base_model, model = get_resnet()
 test_ds, val_ds = get_dataset(False, SIZE, 1, 16, True)
 
 conv_idx = [
