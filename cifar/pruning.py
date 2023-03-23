@@ -8,8 +8,8 @@ import pickle
 
 mixed_precision.set_global_policy("mixed_float16")
 
-SIZE = 160
-base_model, model = get_model(SIZE)
+SIZE = 224
+base_model, model = get_resnet(SIZE)
 model.load_weights(f"model/model{SIZE}.ckpt")
 test_ds, val_ds = get_dataset(False, SIZE, 1, 16, True)
 

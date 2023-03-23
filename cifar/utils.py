@@ -110,10 +110,15 @@ def propagate_constants(layer, input_constants):
             )
             layer.set_weights(layer.get_weights()[:-1] + [bias])
         else:
+            if layer.activation is not None and layer.activation.__name__ != "linear":
+                raise Exception("Can not propagate on a layer with an activation and no bias.")
             for n in layer.outbound_nodes:
                 propagate_constants(n.outbound_layer, outputs)
     elif isinstance(layer, BatchNormalization):
-        pass
+        outputs = layer(input_constants)
+        for n in layer.outbound_nodes:
+            propagate_constants(n.outbound_layer, outputs)
+
     elif isinstance(layer, Activation):
         pass
     elif isinstance(layer, Dropout):
