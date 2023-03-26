@@ -4,6 +4,8 @@ import tensorflow as tf
 
 y_train = tf.keras.utils.to_categorical(y_train, 100)
 y_test = tf.keras.utils.to_categorical(y_test, 100)
+x_train = x_train * 1/255.0
+x_test = x_test * 1/255.0
 
 
 def _get_dataset(is_train, size, epochs, batch_size, xy):
