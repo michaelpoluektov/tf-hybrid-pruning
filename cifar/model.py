@@ -19,7 +19,7 @@ def get_resnet():
             layer.trainable = True
         else:
             layer.trainable = False
-    #base_model = tf.keras.models.clone_model(base_model, clone_function=clone_function)
+    base_model = tf.keras.models.clone_model(base_model, clone_function=clone_function)
     model=tf.keras.models.Sequential()
     model.add(tf.keras.layers.UpSampling2D(size=(7, 7),interpolation='bilinear'))
     model.add(base_model)
