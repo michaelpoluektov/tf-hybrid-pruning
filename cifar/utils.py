@@ -71,6 +71,9 @@ def expand_layer(layer):
     layer.out_mask = tf.ones(
         layer.output_shape[1:], dtype=global_policy().compute_dtype
     )
+    w1, w2 = layer.get_weights()
+    w2 = tf.broadcast_to(tf.reshape(w2, (1, 1, 64)), (56, 56, 64))
+    layer.set_weights([w1, w2])
 
 
 def shrink_layer(layer):
