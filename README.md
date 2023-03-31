@@ -32,7 +32,6 @@ Can we co-design the pruning method and the operator?
 
 >
     .
-    ├── progress.txt                 # Progress report/TODO list
     ├── setup.txt                    # Very non-descriptive setup guide
     ├── cifar/                       # Pruning on a CIFAR model
     ├── mnist_test/                  # Used to test if the installation

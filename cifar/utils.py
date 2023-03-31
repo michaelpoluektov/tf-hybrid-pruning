@@ -18,6 +18,47 @@ from tensorflow.keras.layers import (
 from tqdm import tqdm
 
 
+def get_layer_model(layer, rank=1):
+    (core, (first, last)), rec_errors = partial_tucker(
+        layer.kernel.numpy(), modes=[2, 3], rank=rank, init="svd", n_iter_max=1000
+    )
+    inp = tf.keras.layers.Input(shape=layer.input_shape[1:])
+    l1 = tf.keras.layers.Conv2D(
+        filters=first.shape[1],
+        kernel_size=(1, 1),
+        use_bias=False,
+        dilation_rate=layer.dilation_rate,
+        kernel_initializer=(
+            lambda x, dtype=None: tf.convert_to_tensor(np.expand_dims(first, [0, 1]))
+        ),
+    )(inp)
+    l2 = tf.keras.layers.Conv2D(
+        filters=core.shape[-1],
+        kernel_size=layer.kernel_size,
+        use_bias=False,
+        dilation_rate=layer.dilation_rate,
+        strides=layer.strides,
+        padding=layer.padding,
+        kernel_initializer=(lambda x, dtype=None: tf.convert_to_tensor(core)),
+    )(l1)
+    l3 = tf.keras.layers.Conv2D(
+        filters=last.shape[0],
+        kernel_size=(1, 1),
+        use_bias=True,
+        dilation_rate=layer.dilation_rate,
+        activation=layer.activation,
+        kernel_initializer=(
+            lambda x, dtype=None: tf.convert_to_tensor(
+                np.expand_dims(last.T, [0, 1]), layer.get_weights()[1]
+            )
+        ),
+        bias_initializer=(
+            lambda x, dtype=None: tf.convert_to_tensor(layer.get_weights()[1])
+        ),
+    )(l2)
+    return tf.keras.Model(inputs=inp, outputs=l3)
+
+
 def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
     return [
         i for i, l in enumerate(model.layers) if isinstance(l, tf.keras.layers.Conv2D)
