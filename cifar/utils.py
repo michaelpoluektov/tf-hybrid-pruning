@@ -112,9 +112,6 @@ def expand_layer(layer):
     layer.out_mask = tf.ones(
         layer.output_shape[1:], dtype=global_policy().compute_dtype
     )
-    w1, w2 = layer.get_weights()
-    w2 = tf.broadcast_to(tf.reshape(w2, (1, 1, 64)), (56, 56, 64))
-    layer.set_weights([w1, w2])
 
 
 def shrink_layer(layer):
@@ -131,11 +128,6 @@ def copy_layer(layer) -> tf.keras.layers.Layer:
     layer2.build(layer.input_shape)
     layer2.set_weights(weights)
     return layer2
-
-
-def get_pruned_accuracy(model, layer_id, threshold, test_ds):
-    # WIP
-    model_2 = copy_model(model)
 
 
 def propagate_constants(layer, input_constants):
@@ -175,10 +167,6 @@ def propagate_constants(layer, input_constants):
         pass
     else:
         raise NotImplementedError(f"Layer {layer.__class__} is not supported.")
-
-
-def prune_layer(model, layer_id, max_loss, pbar, test_ds):
-    test_model = copy_model(model)
 
 
 # def search_factors(
