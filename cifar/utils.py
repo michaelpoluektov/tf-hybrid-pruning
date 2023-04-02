@@ -59,6 +59,32 @@ def get_layer_model(layer, rank=1):
     return tf.keras.Model(inputs=inp, outputs=l3)
 
 
+def get_compressed_weights(layer, modes=[2,3], rank=1) -> tuple[np.array, int]:
+    if len(modes) != 2 and len(modes) != 1:
+        raise Exception(f"Modes doesn't make sense: {}")
+    (core, factors), _ = partial_tucker(layer.kernel.numpy(), modes=modes, rank=rank, init='svd')
+    sz = np.prod(layer.output_shape[1:-1])
+    new_w = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
+    if len(modes) == 2:
+        first, last = factors
+        w1 = sz * np.prod(first.shape)
+        w2 = sz * np.prod(core.shape)
+        w3 = sz * np.prod(last.shape)
+        tot_w = w1 + w2 + w3
+    else:
+        tot_w = sz * (np.prod(core.shape) + np.prod(factors[0].shape))
+    return new_w, tot_w
+
+
+def find_sparsity(layer, pbar, max_loss):
+    pass
+
+
+def find_compression(layer, pbar, max_loss):
+    best_sparsity = get_weight(layer)
+    pass    
+
+
 def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
     return [
         i for i, l in enumerate(model.layers) if isinstance(l, tf.keras.layers.Conv2D)
