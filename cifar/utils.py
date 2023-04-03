@@ -1,10 +1,8 @@
 import os
-from typing import Callable
-from dataclasses import dataclass
 from sparse_conv2d import SparseConv2D
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
+import tensorly as tl
+from tensorly.decomposition import partial_tucker
 import numpy as np
 import tensorflow_probability as tfp
 from tensorflow.keras.mixed_precision import global_policy
@@ -16,6 +14,8 @@ from tensorflow.keras.layers import (
     BatchNormalization,
 )
 from tqdm import tqdm
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 
 def get_layer_model(layer, rank=1):
@@ -59,10 +59,12 @@ def get_layer_model(layer, rank=1):
     return tf.keras.Model(inputs=inp, outputs=l3)
 
 
-def get_compressed_weights(layer, modes=[2,3], rank=1) -> tuple[np.array, int]:
+def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
     if len(modes) != 2 and len(modes) != 1:
-        raise Exception(f"Modes doesn't make sense: {}")
-    (core, factors), _ = partial_tucker(layer.kernel.numpy(), modes=modes, rank=rank, init='svd')
+        raise Exception(f"Modes doesn't make sense: {modes}")
+    (core, factors), _ = partial_tucker(
+        layer.kernel.numpy(), modes=modes, rank=rank, init="svd"
+    )
     sz = np.prod(layer.output_shape[1:-1])
     new_w = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
     if len(modes) == 2:
@@ -82,7 +84,7 @@ def find_sparsity(layer, pbar, max_loss):
 
 def find_compression(layer, pbar, max_loss):
     best_sparsity = get_weight(layer)
-    pass    
+    pass
 
 
 def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
