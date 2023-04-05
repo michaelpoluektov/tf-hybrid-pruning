@@ -133,3 +133,4 @@ dmypy.json
 *.ckpt*
 *.h5
 model.png
+cifar/layers
