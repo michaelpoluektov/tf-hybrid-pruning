@@ -131,3 +131,6 @@ dmypy.json
 # Models
 *checkpoint*
 *.ckpt*
+*.h5
+model.png
+cifar/layers
