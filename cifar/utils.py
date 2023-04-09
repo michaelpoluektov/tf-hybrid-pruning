@@ -1,5 +1,4 @@
 import os
-from sparse_conv2d import SparseConv2D
 import tensorflow as tf
 import tensorly as tl
 from tensorly.decomposition import partial_tucker
@@ -14,8 +13,17 @@ from tensorflow.keras.layers import (
     BatchNormalization,
 )
 from tqdm import tqdm
+from dataclasses import dataclass
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
+
+@dataclass
+class Eval:
+    model: tf.keras.Model
+    ds: tf.data.Dataset
+    pbar: tqdm
+    base_accuracy: float
 
 
 def get_layer_model(layer, rank=1):
@@ -59,6 +67,21 @@ def get_layer_model(layer, rank=1):
     return tf.keras.Model(inputs=inp, outputs=l3)
 
 
+def get_spars(spar_limit=100):
+    # 0 and powers of 2 until 25.6%
+    arr = (
+        [0]
+        + [0.1 * 1.3**i for i in range(22) if 0.1 * 1.5**i < spar_limit]
+        + [spar_limit]
+    )
+    return arr
+
+
+def get_props(c):
+    # for 64: [0, 1, 2, 4, 8, 16, 32, 48]
+    return [0] + [2**i for i in range(int(np.log2(c)))] + [3 * c // 4]
+
+
 def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
     if len(modes) != 2 and len(modes) != 1:
         raise Exception(f"Modes doesn't make sense: {modes}")
@@ -78,13 +101,95 @@ def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
     return new_w, tot_w
 
 
-def find_sparsity(layer, pbar, max_loss):
-    pass
+def test_sparsity(l, eval, default_w, prop_w, b, spar):
+    t = np.percentile(abs(prop_w - default_w), 100 - spar)
+    mask = abs(prop_w - default_w) > t
+    s_w = prop_w[:]
+    s_w[mask] = default_w[mask]
+    l.set_weights([s_w, b])
+    _, acc = eval.model.evaluate(eval.ds, verbose=0)
+    l.set_weights([prop_w, b])
+    return s_w, acc
 
 
-def find_compression(layer, pbar, max_loss):
-    best_sparsity = get_weight(layer)
-    pass
+def find_sparsity(l: tf.keras.layers.Layer, eval: Eval, default_w, spar_limit):
+    spars = get_spars(spar_limit * 100)
+    prop_w, b = l.kernel.numpy(), l.bias.numpy()
+    min_spar, max_spar = 0.0, 100.0
+    best_w = default_w
+    while spars:
+        spar = spars[len(spars) // 2]
+        new_w, acc = test_sparsity(l, eval, default_w, prop_w, b, spar)
+        if acc >= eval.base_accuracy:
+            max_spar = spar
+            best_w = new_w
+            spars = list(filter(lambda e: e < spar, spars))
+        elif acc < eval.base_accuracy - 0.03:
+            min_spar = spar
+            spars = list(filter(lambda e: e > spar, spars))
+        else:
+            spars.remove(spar)
+    if max_spar == 100 and min_spar == spar_limit * 100:
+        eval.pbar.write("everything sucks, returning...", end=" ")
+        return default_w, 100.0
+    if max_spar == 0.0:
+        eval.pbar.write("No need for sparsity...", end=" ")
+        return best_w, 0.0
+    if max_spar == 100:
+        max_spar = spar_limit * 100
+    eval.pbar.write(f"found min = {min_spar:.4f}%, max = {max_spar:.4f}%...", end=" ")
+    incr = (max_spar - min_spar) / 10
+    spars = np.arange(min_spar + incr, max_spar + incr / 2, incr)
+    for spar in spars:
+        new_w, acc = test_sparsity(l, eval, default_w, prop_w, b, spar)
+        if acc >= eval.base_accuracy:
+            return new_w, spar
+    eval.pbar.write("everything sucks, returning...", end=" ")
+    return default_w, 100.0
+
+
+def get_decomp_weight(l, rank):
+    sz = np.prod(l.output_shape[1:-1])
+    kshape = l.kernel.shape
+    return sz * (
+        np.prod(kshape[:2]) * np.prod(rank)
+        + rank[0] * kshape[-2]
+        + rank[1] * kshape[-1]
+    )
+
+
+def find_compression(l, eval: Eval):
+    default_w, default_b = l.kernel.numpy(), l.bias.numpy()
+    best_w, best_score, best_pair = default_w, 1, (0, 100)
+    props = get_props(default_w.shape[-1])
+    for i, prop in enumerate(props):
+        eval.pbar.write(f"Testing prop: {prop}...", end=" ")
+        rank = [prop, prop]
+        prop_w = get_decomp_weight(l, rank)
+        if prop_w > best_score * get_weight(l):
+            eval.pbar.write("Breaking.")
+            break
+        if prop != 0:
+            new_w, prop_ops = get_compressed_weights(l, rank=rank)
+        else:
+            new_w, prop_ops = np.zeros(default_w.shape), 0
+        l.set_weights([new_w, default_b])
+        spar_limit = best_score - prop_w / get_weight(l)
+        new_w, spar = find_sparsity(l, eval, default_w, spar_limit)
+        l.set_weights([default_w, default_b])
+        eval.pbar.write(f"final sparsity: {spar:.2f}%")
+        spar_w = get_weight(l) * spar / 100
+        tot_score = (prop_w + spar_w) / get_weight(l)
+        if tot_score <= best_score:
+            best_score = tot_score
+            best_w = new_w
+            best_pair = (prop, spar)
+            if tot_score < 0.02:
+                break
+    eval.pbar.write(
+        f"Best pair: decomposition = {best_pair[0]}, sparsity = {best_pair[1]:4f}, score: {best_score:.4f}"
+    )
+    return best_w, best_pair
 
 
 def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
@@ -133,22 +238,6 @@ def copy_model(model):
     return copy_model
 
 
-def expand_layer(layer):
-    if not isinstance(layer, SparseConv2D):
-        raise AttributeError("Input must be a SparseConv2D layer.")
-    layer.in_mask = tf.ones(layer.input_shape[1:], dtype=global_policy().compute_dtype)
-    layer.out_mask = tf.ones(
-        layer.output_shape[1:], dtype=global_policy().compute_dtype
-    )
-
-
-def shrink_layer(layer):
-    if not isinstance(layer, SparseConv2D):
-        raise AttributeError("Input must be a SparseConv2D layer.")
-    layer.in_mask = 1
-    layer.out_mask = 1
-
-
 def copy_layer(layer) -> tf.keras.layers.Layer:
     config = layer.get_config()
     weights = layer.get_weights()
@@ -156,122 +245,3 @@ def copy_layer(layer) -> tf.keras.layers.Layer:
     layer2.build(layer.input_shape)
     layer2.set_weights(weights)
     return layer2
-
-
-def propagate_constants(layer, input_constants):
-    # WIP
-    if isinstance(layer, SparseConv2D):
-        layer2 = copy_layer(layer)
-        layer2.bias = None
-        layer2.use_bias = False
-        layer2.activation = None
-        outputs = layer2(input_constants)
-        if layer.bias is not None:
-            bias = tf.cast(
-                layer.bias
-                + tf.cast(tf.reshape(outputs, layer.bias.shape), layer.bias.dtype),
-                global_policy().compute_dtype,
-            )
-            layer.set_weights(layer.get_weights()[:-1] + [bias])
-        else:
-            if layer.activation is not None and layer.activation.__name__ != "linear":
-                raise Exception(
-                    "Can not propagate on a layer with an activation and no bias."
-                )
-            for n in layer.outbound_nodes:
-                propagate_constants(n.outbound_layer, outputs)
-    elif isinstance(layer, BatchNormalization):
-        outputs = layer(input_constants)
-        for n in layer.outbound_nodes:
-            propagate_constants(n.outbound_layer, outputs)
-
-    elif isinstance(layer, Activation):
-        pass
-    elif isinstance(layer, Dropout):
-        pass
-    elif isinstance(layer, Add):
-        pass
-    elif isinstance(layer, Multiply):
-        pass
-    else:
-        raise NotImplementedError(f"Layer {layer.__class__} is not supported.")
-
-
-# def search_factors(
-#    model: tf.keras.Model,
-#    layer_id: int,
-#    specs: LayerSpecs,
-#    func: Callable,
-#    test_ds: tf.data.Dataset,
-#    importance_t: tf.Tensor,
-#    max_loss: float,
-#    pbar: tqdm,
-# ) -> LayerSpecs:
-#    base_model = model.layers[1]
-#    t_min, t_max, t_cur = 0, 100, 50
-#    while t_max - t_min > 100 / 2**6:
-#        cutoff = tfp.stats.percentile(importance_t, t_cur)
-#        if not cutoff == 0:
-#            set_const(base_model.layers[layer_id], importance_t < cutoff, s.weights, func)
-#            model.compile(loss="categorical_crossentropy", metrics=["accuracy"])
-#            _, out_accuracy = model.evaluate(test_ds, verbose=0)
-#        else:
-#            out_accuracy = specs.base_accuracy
-#        score = get_score(out_accuracy - specs.base_accuracy, t_cur / 100, max_loss)
-#        pbar.write(
-#            f"Accuracy: {out_accuracy:.5f}, threshold: {t_cur}%, score: {score:.5f}",
-#            end=" ",
-#        )
-#        if score >= 0:
-#            if score > specs.best_score:
-#                specs.best_score = score
-#                specs.best_cutoff = cutoff
-#                specs.best_sp = t_cur
-#            t_min = t_cur
-#            specs.min_cutoff = cutoff
-#            pbar.write("(success)")
-#        else:
-#            t_max = t_cur
-#            pbar.write("(fail)")
-#        t_cur = (t_max - t_min) / 2 + t_min
-#    return specs
-
-
-# def prune_all(
-#    model: tf.keras.Model,
-#    conv_idx: list[int],
-#    test_ds: tf.data.Dataset,
-#    val_ds: tf.data.Dataset,
-#    max_loss: float = 0.2,
-# ):
-#    # Assuming model is trained via transfer learning - base_model would be the original headless model
-#    base_model = model.layers[1]
-#    out_sparsities = []
-#    losses_per_layer = get_weights(conv_idx, base_model) * max_loss
-#    pbar = tqdm(total=len(losses_per_layer))
-#    specs_list = []
-#    for l, i in zip(losses_per_layer, conv_idx):
-#        m = tf.keras.Model(inputs=base_model.input, outputs=base_model.layers[i].output)
-#        activations = get_activations(m, 50, test_ds)
-#        means = tf.math.reduce_mean(activations, 0)
-#        abs_means = tf.math.reduce_mean(tf.math.abs(activations), 0)
-#        model.compile(loss="categorical_crossentropy", metrics=["accuracy"])
-#        s = LayerSpecs(base_accuracy=model.evaluate(test_ds, verbose=0, bias=base_model.layers[i].bias)[1])
-#        pbar.write(f"BASE = {s.base_accuracy:.5f}, maximum accuracy loss: {l:.5f}")
-#        # prune activations
-#        s = search_factors(model, i, s, prune_out, test_ds, abs_means, l, pbar)
-#        # set unpruned activations to mean
-#
-#        # prune in activations
-#
-#        # set unpruned in activations to mean then propagate up to the mask?
-#
-#        # prune weights
-#
-#        pbar.write(
-#            f"Best score (activation pruning): {s.best_score:.5f} ({s.best_sp}%)"
-#        )
-#        pbar.update(1)
-#        set_const(base_model.layers[i], abs_means < s.best_cutoff, None, prune_out)
-#        specs_list.append(s)
-#    return specs_list
