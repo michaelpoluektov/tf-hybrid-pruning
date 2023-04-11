@@ -69,17 +69,13 @@ def get_layer_model(layer, rank=1):
 
 def get_spars(spar_limit=100):
     # 0 and powers of 2 until 25.6%
-    arr = (
-        [0]
-        + [0.1 * 1.3**i for i in range(22) if 0.1 * 1.5**i < spar_limit]
-        + [spar_limit]
-    )
+    arr = [0] + [0.1 * 1.3**i for i in range(22) if 0.1 * 1.5**i < spar_limit]
     return arr
 
 
 def get_props(c):
-    # for 64: [0, 1, 2, 4, 8, 16, 32, 48]
-    return [0] + [2**i for i in range(int(np.log2(c)))] + [3 * c // 4]
+    m = c // 8
+    return [m * i for i in range(1, 7)]
 
 
 def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
@@ -88,39 +84,45 @@ def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
     (core, factors), _ = partial_tucker(
         layer.kernel.numpy(), modes=modes, rank=rank, init="svd"
     )
-    sz = np.prod(layer.output_shape[1:-1])
     new_w = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
-    if len(modes) == 2:
-        first, last = factors
-        w1 = sz * np.prod(first.shape)
-        w2 = sz * np.prod(core.shape)
-        w3 = sz * np.prod(last.shape)
-        tot_w = w1 + w2 + w3
-    else:
-        tot_w = sz * (np.prod(core.shape) + np.prod(factors[0].shape))
-    return new_w, tot_w
+    return new_w
 
 
-def test_sparsity(l, eval, default_w, prop_w, b, spar):
+def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
+    (core, factors), _ = partial_tucker(k, modes=modes, rank=rank)
+    b = tl.tenalg.multi_mode_dot(core, factors, modes)
+    for _ in range(5):
+        diff = abs(k - b)
+        t = np.percentile(diff, spar)
+        mask = diff >= t
+        c = k.copy()
+        c[mask] = b[mask]
+        (core, factors), _ = partial_tucker(c, modes=modes, rank=rank)
+        b = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
+    return b
+
+
+def test_sparsity(l, eval, b, spar, rank):
+    default_w = l.kernel.numpy()
+    prop_w = get_spr_weights(default_w, (2, 3), rank, 100 - spar)
     t = np.percentile(abs(prop_w - default_w), 100 - spar)
-    mask = abs(prop_w - default_w) > t
-    s_w = prop_w.copy()
-    s_w[mask] = default_w[mask]
-    l.set_weights([s_w, b])
-    _, acc = eval.model.evaluate(eval.ds, verbose=0)
+    mask = abs(prop_w - default_w) >= t
+    prop_w[mask] = default_w[mask]
     l.set_weights([prop_w, b])
-    return s_w, acc
+    _, acc = eval.model.evaluate(eval.ds, verbose=0)
+    l.set_weights([default_w, b])
+    return prop_w, acc
 
 
-def find_sparsity(l: tf.keras.layers.Layer, eval: Eval, default_w, spar_limit):
+def find_sparsity(l: tf.keras.layers.Layer, eval: Eval, default_w, spar_limit, rank):
     spars = get_spars(spar_limit * 100)
-    prop_w, b = l.kernel.numpy(), l.bias.numpy()
+    b = l.bias.numpy()
     min_spar, max_spar = 0.0, 100.0
     best_w = default_w
     while spars:
         spar = spars[len(spars) // 2]
-        new_w, acc = test_sparsity(l, eval, default_w, prop_w, b, spar)
-        if acc >= eval.base_accuracy - 0.001:
+        new_w, acc = test_sparsity(l, eval, b, spar, rank)
+        if acc >= eval.base_accuracy - 0.002:
             max_spar = spar
             best_w = new_w
             spars = list(filter(lambda e: e < spar, spars))
@@ -130,20 +132,20 @@ def find_sparsity(l: tf.keras.layers.Layer, eval: Eval, default_w, spar_limit):
         else:
             spars.remove(spar)
     if max_spar == 100 and min_spar == spar_limit * 100:
-        eval.pbar.write("everything sucks, returning...", end=" ")
+        eval.pbar.write("bad, returning...", end=" ")
         return default_w, 100.0
     if max_spar == 0.0:
         eval.pbar.write("No need for sparsity...", end=" ")
         return best_w, 0.0
     max_spar = min(spar_limit * 100, 25, max_spar)
-    eval.pbar.write(f"found min = {min_spar:.4f}%, max = {max_spar:.4f}%...", end=" ")
+    eval.pbar.write(f"found min = {min_spar:.2f}%, max = {max_spar:.2f}%...", end=" ")
     incr = (max_spar - min_spar) / 5
     spars = np.arange(min_spar + incr, max_spar + incr / 2, incr)
     for spar in spars:
-        new_w, acc = test_sparsity(l, eval, default_w, prop_w, b, spar)
-        if acc >= eval.base_accuracy - 0.001:
+        new_w, acc = test_sparsity(l, eval, b, spar, rank)
+        if acc >= eval.base_accuracy - 0.002:
             return new_w, spar
-    eval.pbar.write("everything sucks, returning...", end=" ")
+    eval.pbar.write("bad, returning...", end=" ")
     return default_w, 100.0
 
 
@@ -168,15 +170,9 @@ def find_compression(l, eval: Eval):
         if prop_w > best_score * get_weight(l):
             eval.pbar.write("Breaking.")
             break
-        if prop != 0:
-            new_w, _ = get_compressed_weights(l, rank=rank)
-        else:
-            new_w, _ = np.zeros(default_w.shape), 0
-        l.set_weights([new_w, default_b])
         spar_limit = best_score - prop_w / get_weight(l)
-        new_w, spar = find_sparsity(l, eval, default_w, spar_limit)
-        l.set_weights([default_w, default_b])
-        eval.pbar.write(f"final sparsity: {spar:.2f}%")
+        new_w, spar = find_sparsity(l, eval, default_w, spar_limit, rank)
+        eval.pbar.write(f"f. spar: {spar:.2f}%")
         spar_w = get_weight(l) * spar / 100
         tot_score = (prop_w + spar_w) / get_weight(l)
         if tot_score <= best_score:
