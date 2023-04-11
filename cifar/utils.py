@@ -26,10 +26,7 @@ class Eval:
     base_accuracy: float
 
 
-def get_layer_model(layer, rank=1):
-    (core, (first, last)), rec_errors = partial_tucker(
-        layer.kernel.numpy(), modes=[2, 3], rank=rank, init="svd", n_iter_max=1000
-    )
+def get_layer_model(layer, core, first, last, sp_weights):
     inp = tf.keras.layers.Input(shape=layer.input_shape[1:])
     l1 = tf.keras.layers.Conv2D(
         filters=first.shape[1],
@@ -54,17 +51,29 @@ def get_layer_model(layer, rank=1):
         kernel_size=(1, 1),
         use_bias=True,
         dilation_rate=layer.dilation_rate,
-        activation=layer.activation,
         kernel_initializer=(
             lambda x, dtype=None: tf.convert_to_tensor(
                 np.expand_dims(last.T, [0, 1]), layer.get_weights()[1]
             )
         ),
-        bias_initializer=(
-            lambda x, dtype=None: tf.convert_to_tensor(layer.get_weights()[1])
-        ),
     )(l2)
-    return tf.keras.Model(inputs=inp, outputs=l3)
+    # add sparse layer
+    sp = tf.keras.layers.Conv2D(
+        filters=last.shape[0],
+        kernel_size=layer.kernel_size,
+        use_bias=False,
+        dilation_rate=layer.dilation_rate,
+        strides=layer.strides,
+        padding=layer.padding,
+        kernel_initializer=(lambda x, dtype=None: tf.convert_to_tensor(sp_weights)),
+    )(inp)
+    outs = tf.keras.layers.Add()([l3, sp])
+    # add bias
+    b = layer.get_weights()[1].reshape(1, 1, 1, -1)
+    outs = tf.keras.layers.Add()([outs, b])
+    # add activation
+    outs = layer.activation(outs)
+    return tf.keras.Model(inputs=inp, outputs=outs)
 
 
 def get_spars(spar_limit=100):
@@ -88,7 +97,7 @@ def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
     return new_w
 
 
-def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
+def get_decomp(k, modes=(2, 3), rank=1, spar=90):
     (core, factors), _ = partial_tucker(k, modes=modes, rank=rank)
     b = tl.tenalg.multi_mode_dot(core, factors, modes)
     for _ in range(5):
@@ -99,6 +108,14 @@ def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
         c[mask] = b[mask]
         (core, factors), _ = partial_tucker(c, modes=modes, rank=rank)
         b = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
+    sp = np.zeros(k.shape)
+    sp[mask] = k[mask] - b[mask]
+    return core, *factors, sp.astype(np.float32)
+
+
+def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
+    core, first, last, _ = get_decomp(k, modes, rank, spar)
+    b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
     return b
 
 
