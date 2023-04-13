@@ -26,56 +26,6 @@ class Eval:
     base_accuracy: float
 
 
-def get_layer_model(layer, core, first, last, sp_weights):
-    inp = tf.keras.layers.Input(shape=layer.input_shape[1:])
-    l1 = tf.keras.layers.Conv2D(
-        filters=first.shape[1],
-        kernel_size=(1, 1),
-        use_bias=False,
-        dilation_rate=layer.dilation_rate,
-        kernel_initializer=(
-            lambda x, dtype=None: tf.convert_to_tensor(np.expand_dims(first, [0, 1]))
-        ),
-    )(inp)
-    l2 = tf.keras.layers.Conv2D(
-        filters=core.shape[-1],
-        kernel_size=layer.kernel_size,
-        use_bias=False,
-        dilation_rate=layer.dilation_rate,
-        strides=layer.strides,
-        padding=layer.padding,
-        kernel_initializer=(lambda x, dtype=None: tf.convert_to_tensor(core)),
-    )(l1)
-    l3 = tf.keras.layers.Conv2D(
-        filters=last.shape[0],
-        kernel_size=(1, 1),
-        use_bias=True,
-        dilation_rate=layer.dilation_rate,
-        kernel_initializer=(
-            lambda x, dtype=None: tf.convert_to_tensor(
-                np.expand_dims(last.T, [0, 1]), layer.get_weights()[1]
-            )
-        ),
-    )(l2)
-    # add sparse layer
-    sp = tf.keras.layers.Conv2D(
-        filters=last.shape[0],
-        kernel_size=layer.kernel_size,
-        use_bias=False,
-        dilation_rate=layer.dilation_rate,
-        strides=layer.strides,
-        padding=layer.padding,
-        kernel_initializer=(lambda x, dtype=None: tf.convert_to_tensor(sp_weights)),
-    )(inp)
-    outs = tf.keras.layers.Add()([l3, sp])
-    # add bias
-    b = layer.get_weights()[1].reshape(1, 1, 1, -1)
-    outs = tf.keras.layers.Add()([outs, b])
-    # add activation
-    outs = layer.activation(outs)
-    return tf.keras.Model(inputs=inp, outputs=outs)
-
-
 def get_spars(spar_limit=100):
     # 0 and powers of 2 until 25.6%
     arr = [0] + [0.1 * 1.3**i for i in range(22) if 0.1 * 1.5**i < spar_limit]
