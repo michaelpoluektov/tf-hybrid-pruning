@@ -1,6 +1,8 @@
 import tensorflow as tf
 import numpy as np
-from sparse_conv2d import SparseConv2D, clone_function
+
+# from sparse_conv2d import SparseConv2D, clone_function
+from custom_resnet import ResNet50
 
 
 # weights from model
@@ -32,3 +34,17 @@ def get_resnet():
     _ = model(ins)
     model.load_weights("model/resnet_weights.h5")
     return base_model, model
+
+
+def get_decomp_resnet(ranks):
+    ins = tf.keras.layers.Input(shape=(32, 32, 3))
+    x = tf.keras.layers.UpSampling2D(size=(7, 7), interpolation="bilinear")(ins)
+    x = ResNet50(ranks=ranks, include_top=False, weights=None, input_tensor=x)
+    x = tf.keras.layers.GlobalAveragePooling2D()(x)
+    x = tf.keras.layers.Dropout(0.25)(x)
+    x = tf.keras.layers.Dense(256, activation="relu")(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+    x = tf.keras.layers.Dense(100, activation="softmax")(x)
+    model = tf.keras.Model(inputs=ins, outputs=x)
+    model.load_weights("model/resnet_weights.h5", by_name=True)
+    return model

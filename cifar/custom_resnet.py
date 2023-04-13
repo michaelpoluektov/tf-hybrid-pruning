@@ -86,6 +86,7 @@ def ResNet(
     else:
         inputs = img_input
 
+    return x
     # Create model.
     model = tf.keras.Model(inputs, x, name=model_name)
 
@@ -98,7 +99,7 @@ def ResNet(
 
 def tucker_conv2d(x, filters, rank, kernel_size=3, name=None):
     if rank == 0:
-        return layers.Conv2D(filters, kernel_size, padding="SAME", name=name)
+        return layers.Conv2D(filters, kernel_size, padding="SAME", name=name)(x)
     t = layers.Conv2D(rank, 1, padding="SAME", name=name + "_first", use_bias=False)(x)
     t = layers.Conv2D(
         rank, kernel_size, padding="SAME", name=name + "_core", use_bias=False
@@ -130,7 +131,7 @@ def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None, r
     )
     x = layers.Activation("relu", name=name + "_1_relu")(x)
 
-    x = tucker_conv2d(x, filters, kernel_size, name=name + "_2_conv")
+    x = tucker_conv2d(x, filters, rank, kernel_size, name=name + "_2_conv")
     # x = layers.Conv2D(filters, kernel_size, padding="SAME", name=name + "_2_conv")(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name=name + "_2_bn")(
         x
