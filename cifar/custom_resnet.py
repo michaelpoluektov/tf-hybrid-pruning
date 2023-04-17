@@ -100,14 +100,31 @@ def ResNet(
 def tucker_conv2d(x, filters, rank, kernel_size=3, name=None):
     if rank == 0:
         return layers.Conv2D(filters, kernel_size, padding="SAME", name=name)(x)
-    t = layers.Conv2D(rank, 1, padding="SAME", name=name + "_first", use_bias=False)(x)
     t = layers.Conv2D(
-        rank, kernel_size, padding="SAME", name=name + "_core", use_bias=False
-    )(t)
-    t = layers.Conv2D(filters, 1, padding="SAME", name=name + "_last")(t)
-    s = layers.Conv2D(
-        filters, kernel_size, padding="SAME", name=name + "_sp", use_bias=False
+        rank,
+        1,
+        padding="SAME",
+        name=name + "_first",
+        use_bias=False,
+        kernel_initializer="zeros",
     )(x)
+    t = layers.Conv2D(
+        rank,
+        kernel_size,
+        padding="SAME",
+        name=name + "_core",
+        use_bias=False,
+        kernel_initializer="zeros",
+    )(t)
+    t = layers.Conv2D(
+        filters,
+        1,
+        padding="SAME",
+        name=name + "_last",
+        kernel_initializer="zeros",
+        use_bias=False,
+    )(t)
+    s = layers.Conv2D(filters, kernel_size, padding="SAME", name=name + "_sp")(x)
     x = layers.Add()([s, t])
     return x
 
