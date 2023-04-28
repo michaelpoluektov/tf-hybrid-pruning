@@ -38,21 +38,6 @@ def get_imagenet_resnet():
     return base_model, model
 
 
-# if __name__ == "__main__":
-#     base_model, model = get_resnet_scratch()
-#     # model.save("model.h5")
-#     model.compile(metrics=["accuracy"])
-#     converter = tf.lite.TFLiteConverter.from_keras_model(base_model)
-#     tflite_model = converter.convert()
-#     with open("model.tflite", "wb") as f:
-#         f.write(tflite_model)
-
-# # weights from model
-# def resnet_wfm():
-#     model = tf.keras.models.load_model("model/resnet.h5")
-#     model.save_weights("model/resnet_weights.h5")
-
-
 def _decomp_resnet(ranks):
     ins = tf.keras.layers.Input(shape=(32, 32, 3))
     x = tf.keras.layers.UpSampling2D(size=(7, 7), interpolation="bilinear")(ins)
@@ -116,37 +101,3 @@ if __name__ == "__main__":
         spars = [p[1] for p in props]
         model = get_decomp_resnet(decomps, spars)
         model.save("model/resnet_bn_finetune_decomped.h5")
-
-
-# def get_lora_resnet(prop, ds):
-#     base_model = tf.keras.applications.resnet.ResNet50(
-#         include_top=True, weights="imagenet", input_shape=(224, 224, 3)
-#     )
-#     base_model_names = [l.name for l in base_model.layers]
-#     bias3 = [
-#         l
-#         for l in base_model.layers
-#         if isinstance(l, tf.keras.layers.Conv2D) and l.kernel.shape[0] == 3
-#     ]
-#     ranks = [int(l.filters * prop) for l in bias3]
-#     ins = tf.keras.layers.Input(shape=(32, 32, 3))
-#     x = tf.keras.layers.UpSampling2D(size=(7, 7), interpolation="bilinear")(ins)
-#     x = ResNet50(ranks=ranks, include_top=False, weights=None, input_tensor=x)
-#     x = tf.keras.layers.GlobalAveragePooling2D(name="avg_pool")(x)
-#     x = tf.keras.layers.Dropout(0.1)(x)
-#     x = tf.keras.layers.Dense(100, activation="softmax")(x)
-#     new_model = tf.keras.Model(inputs=ins, outputs=x)
-#     for l in new_model.layers:
-#         if l.name in base_model_names:
-#             l.set_weights(base_model.get_layer(l.name).get_weights())
-#         elif l.name[:-3] in base_model_names:
-#             l.set_weights(base_model.get_layer(l.name[:-3]).get_weights())
-#         else:
-#             print(l.name)
-#     # new_model.trainable = False
-#     new_model.layers[-1].trainable = True
-#     print(new_model.layers[-1].name)
-#     new_model.compile(
-#         optimizer="Adam", loss="categorical_crossentropy", metrics=["accuracy"]
-#     )
-#     new_model.fit(ds, epochs=100)

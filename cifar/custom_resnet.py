@@ -87,14 +87,6 @@ def ResNet(
         inputs = img_input
 
     return x
-    # Create model.
-    model = tf.keras.Model(inputs, x, name=model_name)
-
-    # Load weights.
-    if weights is not None:
-        model.load_weights(weights)
-
-    return model
 
 
 def tucker_conv2d(x, filters, rank, kernel_size=3, name=None):

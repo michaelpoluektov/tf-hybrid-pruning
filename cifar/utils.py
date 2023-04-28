@@ -4,15 +4,6 @@ import tensorflow as tf
 import tensorly as tl
 from tensorly.decomposition import partial_tucker
 import numpy as np
-import tensorflow_probability as tfp
-from tensorflow.keras.mixed_precision import global_policy
-from tensorflow.keras.layers import (
-    Multiply,
-    Add,
-    Dropout,
-    Activation,
-    BatchNormalization,
-)
 from tqdm import tqdm
 from dataclasses import dataclass
 
@@ -222,33 +213,6 @@ def compress_and_val(l, eval: Eval):
     return best_pair, acc
 
 
-def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
-    return [
-        i for i, l in enumerate(model.layers) if isinstance(l, tf.keras.layers.Conv2D)
-    ]
-
-
-def get_conv_idx_in(model: tf.keras.Model) -> list[int]:
-    layers = []
-    for layer in model.layers:
-        outs = [n.outbound_layer for n in layer._outbound_nodes]
-        for out in outs:
-            if isinstance(out, tf.keras.layers.Conv2D):
-                layers.append(model.layers.index(out))
-    return layers
-
-
-def get_activations(
-    model: tf.keras.Model, num_samples: int, ds: tf.data.Dataset
-) -> tf.Tensor:
-    activations = []
-    for j, (d, t) in enumerate(ds):
-        if j == num_samples:
-            break
-        activations.append(model(d))
-    return tf.concat(activations, 0)
-
-
 def get_weight(layer: tf.keras.layers.Conv2D) -> float:
     return np.prod(np.array(layer.kernel.shape)) * np.prod(layer.output_shape[1:-1])
 
@@ -258,20 +222,7 @@ def get_weights(conv_idx: list[int], model: tf.keras.Model) -> np.array:
     return weight_arr / np.sum(weight_arr)
 
 
-def get_score(accuracy_delta: float, sparsity: float, factor: float) -> float:
-    return accuracy_delta + sparsity * factor
-
-
 def copy_model(model):
     copy_model = tf.keras.models.clone_model(model)
     copy_model.set_weights(model.get_weights())
     return copy_model
-
-
-def copy_layer(layer) -> tf.keras.layers.Layer:
-    config = layer.get_config()
-    weights = layer.get_weights()
-    layer2 = type(layer).from_config(config)
-    layer2.build(layer.input_shape)
-    layer2.set_weights(weights)
-    return layer2
