@@ -47,7 +47,7 @@ def get_spars(spar_limit=100):
 
 def get_props(c):
     m = c // 16
-    return [m * i for i in range(4, 13)]  # THIS WAS (1, 13)
+    return [m * i for i in range(4, 15)]  # THIS WAS (1, 13)
 
 
 def get_decomp(k, modes=(2, 3), rank=1, spar=90):
@@ -67,7 +67,13 @@ def get_decomp(k, modes=(2, 3), rank=1, spar=90):
     return core, *factors, sp.astype(np.float32)
 
 
-def get_whatif(k, modes=(2, 3), rank=1, spar=90):
+def get_whatif(
+    k: np.array,
+    structure: PruningStructure,
+    modes: tuple[int, int] = (2, 3),
+    rank: int = 1,
+    spar: float = 90.0,
+):
     if rank:
         core, first, last, sp = get_decomp(k, modes, rank, spar)
         b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
@@ -93,7 +99,7 @@ def find_sparsity(
     best_w = default_w
     while spars:
         spar = spars[len(spars) // 2]
-        new_w = get_whatif(l.kernel.numpy(), (2, 3), rank, 100 - spar)
+        new_w = get_whatif(l.kernel.numpy(), structure, (2, 3), rank, 100 - spar)
         acceptable = structure.eval_func(eval, l, new_w, structure.d_threshold)
         if acceptable:
             max_spar = spar

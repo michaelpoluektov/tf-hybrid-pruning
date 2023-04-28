@@ -3,7 +3,7 @@ import numpy as np
 from model import get_resnet
 from dataset import get_dataset
 from tensorflow.keras import mixed_precision
-from utils import sparsity_only, decomp_only, Eval, compress_and_val
+from utils import Eval, compress_and_val, PruningStructure
 from tqdm import tqdm
 import pickle
 
@@ -27,14 +27,15 @@ for name in names:
         model.compile(metrics=["accuracy"])
         _, base_accuracy = model.evaluate(test_ds)
         e = Eval(model, test_ds, tqdm(total=len(conv_idx)), base_accuracy)
+        p = PruningStructure()
         for idx in conv_idx:
             l = base_model.layers[idx]
-            prop, acc = f(l, e)
+            prop, acc = f(l, e, p)
             props.append(prop)
             e.base_accuracy = acc
             e.pbar.update(1)
         model.evaluate(val_ds)
 
         print(f"MEAN: {np.mean(props)}, ARR: {props}")
-        with open(f"model/{name}_{f.__name__}.pickle", "wb") as h:
+        with open(f"model/{name}_{f.__name__}_2.pickle", "wb") as h:
             pickle.dump(props, h)
