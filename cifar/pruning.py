@@ -8,7 +8,7 @@ from tqdm import tqdm
 import pickle
 
 mixed_precision.set_global_policy("mixed_float16")
-names = ["resnet_l1", "resnet_l2", "resnet_noreg", "resnet_bn_finetune"]
+names = ["resnet_l1", "resnet_l2", "resnet_noreg", "resnet_bn_finetune"][3:]
 funcs = [compress_and_val]
 # funcs = [sparsity_only, decomp_only]
 

@@ -134,3 +134,9 @@ dmypy.json
 *.h5
 model.png
 cifar/layers
+*.pgf
+*.pickle
+*.JPEG
+*.jpeg
+*.jpg
+*.png

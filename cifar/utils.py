@@ -35,7 +35,7 @@ def get_spars(spar_limit=100):
 
 def get_props(c):
     m = c // 16
-    return [m * i for i in range(1, 13)]
+    return [m * i for i in range(4, 13)]  # THIS WAS (1, 13)
 
 
 def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
