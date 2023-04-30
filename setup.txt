@@ -1,4 +1,0 @@
-1. create conda environment (or mamba/micromamba) with tensorflow, cudnn, tensorflow_model_optimization (from pip) etc.
-2. run "export XLA_FLAGS=--xla_gpu_cuda_data_dir=/home/$USER/miniconda3/envs/{NAME}/lib"
-3. arch specific: cuda is installed in /opt for some reason, so same command but with /opt/cuda
-
