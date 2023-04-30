@@ -20,16 +20,6 @@ class Eval:
     base_accuracy: float
 
 
-def relu_eval(eval: Eval, l: Layer, new_w: np.array, d_threshold: float = 0.001):
-    default_w = l.kernel.numpy()
-    l.set_weights([new_w, l.bias.numpy()])
-    # ResNet specific: 3x3 conv2d always followed by BN then ReLU, no splits
-    relu = l.outbound_nodes[0].outbound_layer.outbound_nodes[0].outbound_layer
-    new_model = tf.keras.Model(l.input, relu.output)
-    l.set_weights([default_w, l.bias.numpy()])
-    return True
-
-
 def test_weights_eval(
     eval: Eval, l: Layer, new_w: np.array, d_threshold: float = 0.001
 ):
@@ -194,14 +184,6 @@ def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
             best_pair = rank, spar
             best_w = new_k
     return best_w, best_pair
-
-
-def compress_and_val(l: Layer, eval: Eval, structure: PruningStructure):
-    best_w, best_pair = find_compression_loss(l, eval, structure)
-    l.set_weights([best_w, l.bias.numpy()])
-    _, acc = eval.model.evaluate(eval.ds)
-    eval.base_accuracy = acc
-    return best_pair, acc
 
 
 def get_weight(layer: tf.keras.layers.Conv2D) -> float:
