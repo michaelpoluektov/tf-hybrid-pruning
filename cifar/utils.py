@@ -4,17 +4,10 @@ import tensorflow as tf
 import tensorly as tl
 from tensorly.decomposition import partial_tucker
 import numpy as np
-import tensorflow_probability as tfp
-from tensorflow.keras.mixed_precision import global_policy
-from tensorflow.keras.layers import (
-    Multiply,
-    Add,
-    Dropout,
-    Activation,
-    BatchNormalization,
-)
 from tqdm import tqdm
 from dataclasses import dataclass
+from typing import Callable
+from tensorflow.keras.layers import Layer
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -27,34 +20,76 @@ class Eval:
     base_accuracy: float
 
 
-def get_spars(spar_limit=100):
+def relu_eval(eval: Eval, l: Layer, new_w: np.array, d_threshold: float = 0.001):
+    default_w = l.kernel.numpy()
+    l.set_weights([new_w, l.bias.numpy()])
+    # ResNet specific: 3x3 conv2d always followed by BN then ReLU, no splits
+    relu = l.outbound_nodes[0].outbound_layer.outbound_nodes[0].outbound_layer
+    new_model = tf.keras.Model(l.input, relu.output)
+    l.set_weights([default_w, l.bias.numpy()])
+    return True
+
+
+def test_weights_eval(
+    eval: Eval, l: Layer, new_w: np.array, d_threshold: float = 0.001
+):
+    default_w = l.kernel.numpy()
+    l.set_weights([new_w, l.bias.numpy()])
+    _, acc = eval.model.evaluate(eval.ds, verbose=0)
+    l.set_weights([default_w, l.bias.numpy()])
+    return acc >= eval.base_accuracy - d_threshold
+
+
+@dataclass
+class PruningStructure:
+    transform_mask: Callable = lambda x: x
+    reduce_ker: Callable = lambda x: x
+
+
+@dataclass
+class FixedLoss:
+    pruning_structure: PruningStructure = PruningStructure()
+    decomp_weight_func: Callable[float, float] = lambda x: x
+    spar_weight_func: Callable[float, float] = lambda x: 4 * x
+    eval_func: Callable[[Eval, Layer, np.array], bool] = test_weights_eval
+
+
+@dataclass
+class FixedParams:
+    weight_dict: dict[Layer, float]
+    pruning_structure: PruningStructure = PruningStructure()
+    decomp_weight_func: Callable[float, float] = lambda x: x
+    inv_spar_weight_func: Callable[float, float] = lambda x: x / 4
+    eval_func: Callable[[Eval, Layer, np.array], float] = lambda e, l, k: np.mean(
+        (l.kernel.numpy() - k) ** 2
+    )
+
+
+def get_spars(spar_limit: int = 100):
     # 0 and powers of 2 until 25.6%
     arr = [0] + [0.1 * 1.3**i for i in range(19) if 0.1 * 1.3**i < spar_limit]
     return arr
 
 
-def get_props(c):
+def get_props(c: int):
     m = c // 16
-    return [m * i for i in range(4, 13)]  # THIS WAS (1, 13)
+    return [m * i for i in range(4, 15)]  # THIS WAS (1, 13)
 
 
-def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
-    if len(modes) != 2 and len(modes) != 1:
-        raise Exception(f"Modes doesn't make sense: {modes}")
-    (core, factors), _ = partial_tucker(
-        layer.kernel.numpy(), modes=modes, rank=rank, init="svd"
-    )
-    new_w = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
-    return new_w
-
-
-def get_decomp(k, modes=(2, 3), rank=1, spar=90):
+def get_decomp(
+    k: np.array,
+    structure: PruningStructure,
+    modes: tuple[int, int] = (2, 3),
+    rank: int = 1,
+    spar: float = 90.0,
+):
+    rank = [rank, rank]
     (core, factors), _ = partial_tucker(k, modes=modes, rank=rank)
     b = tl.tenalg.multi_mode_dot(core, factors, modes)
     for _ in range(5):
-        diff = abs(k - b)
+        diff = structure.reduce_ker(abs(k - b))
         t = np.percentile(diff, spar)
-        mask = diff >= t
+        mask = structure.transform_mask(diff >= t)
         c = k.copy()
         c[mask] = b[mask]
         (core, factors), _ = partial_tucker(c, modes=modes, rank=rank)
@@ -64,53 +99,124 @@ def get_decomp(k, modes=(2, 3), rank=1, spar=90):
     return core, *factors, sp.astype(np.float32)
 
 
-def get_whatif(k, modes=(2, 3), rank=1, spar=90):
+def get_whatif(
+    k: np.array,
+    structure: PruningStructure,
+    modes: tuple[int, int] = (2, 3),
+    rank: int = 1,
+    spar: float = 90.0,
+):
     if rank:
-        core, first, last, sp = get_decomp(k, modes, rank, spar)
+        core, first, last, sp = get_decomp(k, structure, modes, rank, spar)
         b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
         return b + sp
     else:
-        t = np.percentile(abs(k), spar)
-        mask = abs(k) > t
+        t = np.percentile(structure.reduce_ker(abs(k)), spar)
+        mask = structure.transform_mask(abs(k) > t)
         b = np.zeros(k.shape)
         b[mask] = k[mask]
         return b
 
 
-def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
-    core, first, last, _ = get_decomp(k, modes, rank, spar)
-    b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
-    return b
+def find_sparsity(
+    l: Layer,
+    eval: Eval,
+    default_w: np.array,
+    spar_limit: float,
+    rank: int,
+    fl: FixedLoss,
+):
+    spars = get_spars(spar_limit * 100)
+    max_spar = 100.0
+    best_w = default_w
+    while spars:
+        spar = spars[len(spars) // 2]
+        new_w = get_whatif(
+            l.kernel.numpy(), fl.pruning_structure, (2, 3), rank, 100 - spar
+        )
+        acceptable = fl.eval_func(eval, l, new_w)
+        if acceptable:
+            max_spar = spar
+            best_w = new_w
+            spars = list(filter(lambda e: e < spar, spars))
+        else:
+            spars = list(filter(lambda e: e > spar, spars))
+    if max_spar == 100:
+        eval.pbar.write("Bad, returning...", end=" ")
+        return default_w, 100.0
+    elif max_spar == 0.0:
+        eval.pbar.write("No need for sparsity...", end=" ")
+        return best_w, 0.0
+    else:
+        eval.pbar.write(f"Found sparsity: {max_spar:.1f}%")
+        return best_w, max_spar
 
 
-def test_sparsity(l, eval, spar, rank):
+def find_compression_loss(l: Layer, eval: Eval, fl: FixedLoss):
     default_w = l.kernel.numpy()
-    b = l.bias.numpy()
-    prop_w = get_whatif(default_w, (2, 3), rank, 100 - spar)
-    l.set_weights([prop_w, b])
-    _, acc = eval.model.evaluate(eval.ds, verbose=0)
-    l.set_weights([default_w, b])
-    return prop_w, acc
+    best_w, best_score, best_pair = default_w, 1, (0, 100)
+    ranks = get_props(default_w.shape[-1])
+    for i, rank in enumerate(ranks):
+        eval.pbar.write(f"Testing Rank: {rank}...", end=" ")
+        prop_w = fl.decomp_weight_func(get_decomp_weight(l, rank) / get_weight(l))
+        if prop_w > best_score:
+            eval.pbar.write("Breaking.")
+            break
+        spar_limit = best_score - prop_w
+        new_w, spar = find_sparsity(l, eval, default_w, spar_limit, rank, fl)
+        spar_w = fl.spar_weight_func(spar / 100)
+        tot_score = prop_w + spar_w
+        if tot_score <= best_score:
+            best_score = tot_score
+            best_w = new_w
+            best_pair = (rank, spar)
+    eval.pbar.write(
+        f"Best pair: decomposition = {best_pair[0]},"
+        + f" sparsity = {best_pair[1]:4f}, score: {best_score:.4f}"
+    )
+    return best_w, best_pair
 
 
-def sparsity_only(l, eval):
-    for i in range(10, 100, 5):
-        w, acc = test_sparsity(l, eval, i, 0)
-        if acc >= eval.base_accuracy - 0.001:
-            l.set_weights([w, l.bias.numpy()])
-            return i / 100, acc
-    return 1, eval.base_accuracy
+def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
+    default_w = l.kernel.numpy()
+    ranks = get_props(default_w)
+    min_loss = 1e31
+    best_pair = 0, 100
+    best_w = default_w
+    for i, rank in enumerate(ranks):
+        eval.pbar.write(f"Testing Rank: {rank}...", end=" ")
+        prop_w = fp.decomp_weight_func(get_decomp_weight(l, rank) / get_weight(l))
+        spar = fp.inv_spar_weight_func(1 - prop_w)
+        new_k = get_whatif(default_w, fp.pruning_structure, rank=rank, spar=100 - spar)
+        loss = fp.eval_func(eval, l, new_k)
+        if loss < min_loss:
+            min_loss = loss
+            best_pair = rank, spar
+            best_w = new_k
+    return best_w, best_pair
 
 
-def decomp_only(l, eval):
-    c = l.kernel.shape[-1]
-    for i in range(1, 14):
-        r = c * i // 16
-        w, acc = test_sparsity(l, eval, 0, [r, r])
-        if acc >= eval.base_accuracy - 0.001:
-            l.set_weights([w, l.bias.numpy()])
-            return get_decomp_weight(l, [r, r]) / get_weight(l), acc
-    return 1, eval.base_accuracy
+def compress_and_val(l: Layer, eval: Eval, structure: PruningStructure):
+    best_w, best_pair = find_compression_loss(l, eval, structure)
+    l.set_weights([best_w, l.bias.numpy()])
+    _, acc = eval.model.evaluate(eval.ds)
+    eval.base_accuracy = acc
+    return best_pair, acc
+
+
+def get_weight(layer: tf.keras.layers.Conv2D) -> float:
+    return np.prod(np.array(layer.kernel.shape)) * np.prod(layer.output_shape[1:-1])
+
+
+def get_weights(conv_idx: list[int], model: tf.keras.Model) -> np.array:
+    weight_arr = np.array([get_weight(model.layers[i]) for i in conv_idx])
+    return weight_arr / np.sum(weight_arr)
+
+
+def copy_model(model):
+    copy_model = tf.keras.models.clone_model(model)
+    copy_model.set_weights(model.get_weights())
+    return copy_model
 
 
 def try_sparsities(l, eval, default_w, rank):
@@ -142,41 +248,8 @@ def get_decomp_stats(l, eval: Eval):
     return llst
 
 
-def find_sparsity(l: tf.keras.layers.Layer, eval: Eval, default_w, spar_limit, rank):
-    spars = get_spars(spar_limit * 100)
-    min_spar, max_spar = 0.0, 100.0
-    best_w = default_w
-    while spars:
-        spar = spars[len(spars) // 2]
-        new_w, acc = test_sparsity(l, eval, spar, rank)
-        if acc >= eval.base_accuracy - 0.002:
-            max_spar = spar
-            best_w = new_w
-            spars = list(filter(lambda e: e < spar, spars))
-        elif acc < eval.base_accuracy - 0.01:
-            min_spar = spar
-            spars = list(filter(lambda e: e > spar, spars))
-        else:
-            spars.remove(spar)
-    if max_spar == 100 and min_spar == spar_limit * 100:
-        eval.pbar.write("bad, returning...", end=" ")
-        return default_w, 100.0
-    if max_spar == 0.0:
-        eval.pbar.write("No need for sparsity...", end=" ")
-        return best_w, 0.0
-    max_spar = min(spar_limit * 100, 25, max_spar)
-    eval.pbar.write(f"found min = {min_spar:.2f}%, max = {max_spar:.2f}%...", end=" ")
-    incr = (max_spar - min_spar) / 5
-    spars = np.arange(min_spar + incr, max_spar + incr / 2, incr)
-    for spar in spars:
-        new_w, acc = test_sparsity(l, eval, spar, rank)
-        if acc >= eval.base_accuracy - 0.002:
-            return new_w, spar
-    eval.pbar.write("bad, returning...", end=" ")
-    return default_w, 100.0
-
-
 def get_decomp_weight(l, rank):
+    rank = [rank, rank]
     sz = np.prod(l.output_shape[1:-1])
     kshape = l.kernel.shape
     return sz * (
@@ -186,92 +259,47 @@ def get_decomp_weight(l, rank):
     )
 
 
-def find_compression(l, eval: Eval):
-    default_w = l.kernel.numpy()
-    best_w, best_score, best_pair = default_w, 1, (0, 100)
-    props = get_props(default_w.shape[-1])
-    for i, prop in enumerate(props):
-        eval.pbar.write(f"Testing prop: {prop}...", end=" ")
-        rank = [prop, prop]
-        prop_w = get_decomp_weight(l, rank)
-        if prop_w > best_score * get_weight(l):
-            eval.pbar.write("Breaking.")
-            break
-        spar_limit = best_score - prop_w / get_weight(l)
-        new_w, spar = find_sparsity(l, eval, default_w, spar_limit, rank)
-        eval.pbar.write(f"f. spar: {spar:.2f}%")
-        spar_w = get_weight(l) * spar * 4 / 100
-        tot_score = (prop_w + spar_w) / get_weight(l)
-        if tot_score <= best_score:
-            best_score = tot_score
-            best_w = new_w
-            best_pair = (prop, spar)
-            if tot_score < 0.02:
-                break
-    eval.pbar.write(
-        f"Best pair: decomposition = {best_pair[0]}, sparsity = {best_pair[1]:4f}, score: {best_score:.4f}"
+def sparsity_only(l, eval):
+    for i in range(10, 100, 5):
+        w, acc = test_sparsity(l, eval, i, 0)
+        if acc >= eval.base_accuracy - 0.001:
+            l.set_weights([w, l.bias.numpy()])
+            return i / 100, acc
+    return 1, eval.base_accuracy
+
+
+def decomp_only_stats(l, eval):
+    c = l.kernel.shape[-1]
+    for i in range(1, 14):
+        r = c * i // 16
+        w, acc = test_sparsity(l, eval, 0, [r, r])
+        if acc >= eval.base_accuracy - 0.001:
+            l.set_weights([w, l.bias.numpy()])
+            return get_decomp_weight(l, [r, r]) / get_weight(l), acc
+    return 1, eval.base_accuracy
+
+
+def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
+    core, first, last, _ = get_decomp(k, None, modes, rank, spar)
+    b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
+    return b
+
+
+def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
+    if len(modes) != 2 and len(modes) != 1:
+        raise Exception(f"Modes doesn't make sense: {modes}")
+    (core, factors), _ = partial_tucker(
+        layer.kernel.numpy(), modes=modes, rank=rank, init="svd"
     )
-    return best_w, best_pair
+    new_w = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
+    return new_w
 
 
-def compress_and_val(l, eval: Eval):
-    best_w, best_pair = find_compression(l, eval)
-    l.set_weights([best_w, l.bias.numpy()])
-    _, acc = eval.model.evaluate(eval.ds)
-    eval.base_accuracy = acc
-    return best_pair, acc
-
-
-def get_conv_idx_out(model: tf.keras.Model) -> list[int]:
-    return [
-        i for i, l in enumerate(model.layers) if isinstance(l, tf.keras.layers.Conv2D)
-    ]
-
-
-def get_conv_idx_in(model: tf.keras.Model) -> list[int]:
-    layers = []
-    for layer in model.layers:
-        outs = [n.outbound_layer for n in layer._outbound_nodes]
-        for out in outs:
-            if isinstance(out, tf.keras.layers.Conv2D):
-                layers.append(model.layers.index(out))
-    return layers
-
-
-def get_activations(
-    model: tf.keras.Model, num_samples: int, ds: tf.data.Dataset
-) -> tf.Tensor:
-    activations = []
-    for j, (d, t) in enumerate(ds):
-        if j == num_samples:
-            break
-        activations.append(model(d))
-    return tf.concat(activations, 0)
-
-
-def get_weight(layer: tf.keras.layers.Conv2D) -> float:
-    return np.prod(np.array(layer.kernel.shape)) * np.prod(layer.output_shape[1:-1])
-
-
-def get_weights(conv_idx: list[int], model: tf.keras.Model) -> np.array:
-    weight_arr = np.array([get_weight(model.layers[i]) for i in conv_idx])
-    return weight_arr / np.sum(weight_arr)
-
-
-def get_score(accuracy_delta: float, sparsity: float, factor: float) -> float:
-    return accuracy_delta + sparsity * factor
-
-
-def copy_model(model):
-    copy_model = tf.keras.models.clone_model(model)
-    copy_model.set_weights(model.get_weights())
-    return copy_model
-
-
-def copy_layer(layer) -> tf.keras.layers.Layer:
-    config = layer.get_config()
-    weights = layer.get_weights()
-    layer2 = type(layer).from_config(config)
-    layer2.build(layer.input_shape)
-    layer2.set_weights(weights)
-    return layer2
+def test_sparsity(l, eval, spar, rank):
+    default_w = l.kernel.numpy()
+    b = l.bias.numpy()
+    prop_w = get_whatif(default_w, (2, 3), rank, 100 - spar)
+    l.set_weights([prop_w, b])
+    _, acc = eval.model.evaluate(eval.ds, verbose=0)
+    l.set_weights([default_w, b])
+    return prop_w, acc
