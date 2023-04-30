@@ -6,9 +6,11 @@ sys.path.append("../src")
 import argparse
 from pruning import find_factors_loss, find_factors_params
 from model import get_resnet, get_decomp_resnet
+from dataset import get_dataset
 from utils import FixedLoss, FixedParams, Eval, PruningStructure
 import numpy as np
 import tensorflow as tf
+from tqdm import tqdm
 
 
 def parse_args():
@@ -79,14 +81,54 @@ def get_pruning_structure(args):
     if args.pruning_structure == "unstructured":
         return PruningStructure()
     elif args.pruning_structure == "channel":
-        def reduce_ker(k): return np.mean(k, axis = 2)
-        def transform_mask
-    pass
+
+        def reduce_ker(k):
+            return np.mean(k, axis=2)
+
+        def transform_mask(mask, shape):
+            mask_expanded = mask[:, :, np.newaxis, :]
+            return np.broadcast_to(mask_expanded, shape)
+
+        return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+    elif args.pruning_structure == "filter":
+
+        def reduce_ker(k):
+            return np.mean(k, axis=3)
+
+        def transform_mask(mask, shape):
+            mask_expanded = mask[:, :, :, np.newaxis]
+            return np.broadcast_to(mask_expanded, shape)
+
+        return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+    else:
+        raise NotImplementedError("block structure is not implemented yet")
 
 
 def fixed_loss(model, base_model, args):
-
-    pass
+    ps = get_pruning_structure(args)
+    fl = FixedLoss(ps)
+    layers = [
+        l
+        for l in base_model.layers
+        if isinstance(l, tf.keras.layers.Conv2D) and l.kernel.shape[0] == 3
+    ]
+    test_ds, val_ds = get_dataset(False, 224, 1, 16, True)
+    print("Evaluating model...", end=" ")
+    _, val_accuracy = model.evaluate(val_ds, verbose=0)
+    _, test_accuracy = model.evaluate(test_ds, verbose=0)
+    print(f"Accuracy: val={val_accuracy:.2f}, test={test_accuracy:.2f}")
+    ev = Eval(
+        model=model,
+        ds=test_ds,
+        pbar=tqdm(total=len(layers)),
+        base_accuracy=test_accuracy,
+    )
+    pairs = find_factors_loss(base_model, layers, ev, fl)
+    _, new_val = model.evaluate(val_ds, verbose=0)
+    print(
+        f"Found factors. Accuracy loss: test={test_accuracy - ev.base_accuracy:.2}, val={val_accuracy-new_val:.2f}"
+    )
+    return pairs
 
 
 def fixed_params(model, base_model, args):
@@ -110,3 +152,8 @@ def main(args):
         f.write(tflite_model)
 
     print(f"Compressed model saved to {args.output_path}")
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    main(args)
