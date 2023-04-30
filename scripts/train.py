@@ -1,4 +1,7 @@
 import tensorflow as tf
+import sys
+
+sys.path.append("../src")
 from model import get_resnet
 from dataset import get_dataset
 from tensorflow.keras import mixed_precision
@@ -49,7 +52,7 @@ def train(base_model, model, train_ds, test_ds, reg, filename, freeze=False):
         loss="categorical_crossentropy",
         metrics=["accuracy", "categorical_crossentropy"],
     )
-    model.save_weights(f"model/{filename}.h5")
+    model.save_weights(f"../models/{filename}.h5")
 
 
 if __name__ == "__main__":

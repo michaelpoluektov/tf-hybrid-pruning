@@ -7,7 +7,7 @@ from custom_resnet import ResNet50
 
 
 # copied from Kaggle notebook, will cite in write-up
-def get_resnet():
+def get_resnet(ws_path=None):
     base_model = tf.keras.applications.resnet.ResNet50(
         include_top=False, weights="imagenet", input_shape=(224, 224, 3)
     )
@@ -22,19 +22,9 @@ def get_resnet():
     model.add(tf.keras.layers.Dense(100, activation="softmax"))
     ins = np.zeros(shape=(1, 32, 32, 3))
     _ = model(ins)
-    return base_model, model
-
-
-def get_resnet_scratch():
-    base_model, model = get_resnet()
-    model.load_weights("model/resnet_l1.h5")
-    return base_model, model
-
-
-def get_imagenet_resnet():
-    base_model, model = get_resnet()
     base_model.trainable = False
-    # train yourself or load weights
+    if ws_path:
+        model.load_weights(ws_path)
     return base_model, model
 
 
@@ -51,10 +41,10 @@ def _decomp_resnet(ranks):
     return model
 
 
-def get_decomp_resnet(ranks, spars):
+def get_decomp_resnet(ranks, spars, ws_path):
     model = _decomp_resnet(ranks)
     name_set = set([l.name for l in model.layers])
-    base_model, model2 = get_resnet_scratch()
+    base_model, model2 = get_resnet(ws_path)
     bias3 = [
         l
         for l in base_model.layers
@@ -88,16 +78,3 @@ def get_decomp_resnet(ranks, spars):
     for m2, m in zip(model2_names, model_names):
         model.get_layer(m).set_weights(model2.get_layer(m2).get_weights())
     return model
-    # model.load_weights("model/custom_resnet50.h5", by_name=True)
-    # return model
-
-
-if __name__ == "__main__":
-    import pickle
-
-    with open("model/resnet_bn_finetune_compress_and_val.pickle", "rb") as f:
-        props = pickle.load(f)
-        decomps = [p[0] for p in props]
-        spars = [p[1] for p in props]
-        model = get_decomp_resnet(decomps, spars)
-        model.save("model/resnet_bn_finetune_decomped.h5")

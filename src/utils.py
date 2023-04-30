@@ -32,7 +32,9 @@ def test_weights_eval(
 
 @dataclass
 class PruningStructure:
-    transform_mask: Callable = lambda x: x
+    transform_mask: Callable[
+        [np.array, tuple[int, int, int, int]], np.array
+    ] = lambda k, shape: k
     reduce_ker: Callable = lambda x: x
 
 
@@ -79,7 +81,7 @@ def get_decomp(
     for _ in range(5):
         diff = structure.reduce_ker(abs(k - b))
         t = np.percentile(diff, spar)
-        mask = structure.transform_mask(diff >= t)
+        mask = structure.transform_mask(diff >= t, k.shape)
         c = k.copy()
         c[mask] = b[mask]
         (core, factors), _ = partial_tucker(c, modes=modes, rank=rank)
@@ -102,7 +104,7 @@ def get_whatif(
         return b + sp
     else:
         t = np.percentile(structure.reduce_ker(abs(k)), spar)
-        mask = structure.transform_mask(abs(k) > t)
+        mask = structure.transform_mask(abs(k) > t, k.shape)
         b = np.zeros(k.shape)
         b[mask] = k[mask]
         return b
