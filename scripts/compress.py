@@ -15,6 +15,7 @@ from utils import (
     PruningStructure,
     get_decomp_weight,
     get_weight,
+    test_weights_eval,
 )
 import numpy as np
 import tensorflow as tf
@@ -115,13 +116,24 @@ def get_pruning_structure(args):
         raise NotImplementedError("block structure is not implemented yet")
 
 
-def fixed_loss(model, ps, base_model, args):
-    fl = FixedLoss(ps)
-    layers = [
+def get_loss_eval_func(args):
+    loss = args.max_acc_loss
+    # CHANGE FOR 1x1
+    per_layer_loss = loss / 16
+    return lambda x, y, z: test_weights_eval(x, y, z, per_layer_loss)
+
+
+def get_layers(base_model):
+    return [
         l
         for l in base_model.layers
         if isinstance(l, tf.keras.layers.Conv2D) and l.kernel.shape[0] == 3
     ]
+
+
+def fixed_loss(model, ps, base_model, args):
+    fl = FixedLoss(ps, eval_func=get_loss_eval_func(args))
+    layers = get_layers(base_model)
     test_ds, val_ds = get_dataset(False, 224, 1, 16, True)
     print("Evaluating model...", end=" ")
     _, val_accuracy = model.evaluate(val_ds, verbose=0)
@@ -133,20 +145,28 @@ def fixed_loss(model, ps, base_model, args):
         pbar=tqdm(total=len(layers)),
         base_accuracy=test_accuracy,
     )
-    pairs = find_factors_loss(base_model, layers, ev, fl)
+    comp_dict = find_factors_loss(base_model, layers, ev, fl)
     _, new_val = model.evaluate(val_ds, verbose=0)
     print(
         f"Found factors. Accuracy loss: test={(test_accuracy - ev.base_accuracy)*100:.2}%, val={(val_accuracy-new_val)*100:.2f}%"
     )
     print("FACTORS:")
-    for l, (r, s) in zip(layers, pairs):
+    for l in comp_dict:
+        r, s = comp_dict[l]
         print(
             f"{l.name}: rank={r} ({fl.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%), sparsity={s:.2f}% ({fl.spar_weight_func(s)}%)"
         )
+    pairs = [comp_dict[l] for l in layers]
     return pairs
 
 
 def fixed_params(model, ps, base_model, args):
+    layers = get_layers(base_model)
+    stds = np.array([l.kernel.numpy().std() for l in layers])
+    ws = stds / np.sum(stds) * len(layers)
+    print(ws)
+    weight_dict = {l: std for l, std in zip(layers)}
+    fp = FixedParams(weight_dict)
     pass
 
 
