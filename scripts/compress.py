@@ -25,6 +25,18 @@ from tensorflow.keras import mixed_precision
 mixed_precision.set_global_policy("mixed_float16")
 
 
+def tuple_of_ints(value):
+    # Split the input string by comma and convert to a tuple of integers
+    tuple_values = tuple(map(int, value.split(",")))
+
+    if len(tuple_values) != 2:
+        raise argparse.ArgumentTypeError(
+            f"Expected a tuple of 2 integers, but got {tuple_values}"
+        )
+
+    return tuple_values
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Optimise model and convert to TFLite")
     parser.add_argument(
@@ -45,7 +57,7 @@ def parse_args():
     )
     parser.add_argument(
         "--block_size",
-        type=tuple,
+        type=tuple_of_ints,
         help="Size of the block when using block pruning structure",
     )
     parser.add_argument(
@@ -118,6 +130,37 @@ def get_pruning_structure(args):
             return np.broadcast_to(mask_expanded, shape)
 
         return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+    elif args.pruning_structure == "block":
+        block_size = args.block_size
+        if 64 % block_size[0] != 0 or 64 % block_size[1] != 0:
+            raise AttributeError(
+                f"Invalid shape for block structure: must be a factor of 64, got {block_size}"
+            )
+
+        def get_k_shape(k_shape, block_size):
+            return (
+                k_shape[:2]
+                + (k_shape[2] // block_size[0], block_size[0])
+                + (k_shape[3] // block_size[1], block_size[1])
+            )
+
+        def reduce_ker(k):
+            new_k_shape = get_k_shape(k.shape, block_size)
+            new_k = k.reshape(new_k_shape)
+            return np.mean(new_k, axis=(3, 5))
+
+        def transform_mask(mask, shape):
+            mask_expanded = mask[:, :, :, np.newaxis, :, np.newaxis]
+            broadcast_shape = mask_expanded.shape[:3] + (
+                block_size[0],
+                mask_expanded.shape[4],
+                block_size[1],
+            )
+            broadcast_mask = np.broadcast_to(mask_expanded, broadcast_shape)
+            return broadcast_mask.reshape(shape)
+
+        return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+
     else:
         raise NotImplementedError("block structure is not implemented yet")
 

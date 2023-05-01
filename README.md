@@ -63,9 +63,6 @@ Run `[SCRIPT NAME] --help` for more arguments.
 
 ## TODO
 
-- add fixed params
-- make max loss work for fixed loss
-- make block work
 - finish readme
 - make into library
 - plot lots of stats
