@@ -139,5 +139,4 @@ cifar/layers
 *.JPEG
 *.jpeg
 *.jpg
-*.png
 *.tflite
