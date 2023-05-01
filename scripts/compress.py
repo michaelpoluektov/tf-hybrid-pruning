@@ -93,7 +93,7 @@ def parse_args():
         help="Relative contribution of the sparse Conv2D layer with respect to sparsity",
     )
     parser.add_argument(
-        "--method",
+        "--compression_type",
         type=str,
         choices=["hybrid", "tucker", "spars"],
         default="hybrid",
@@ -257,16 +257,16 @@ def fixed_params(model, ps, base_model, args):
         inv_spar_weight_func=lambda x: x / args.sparsity_weight,
         spar_weight_func=lambda x: args.sparsity_weight * x,
     )
-    if args.method == "hybrid":
+    if args.compression_type == "hybrid":
         func = find_factors_params
-    elif args.method == "tucker":
+    elif args.compression_type == "tucker":
         func = find_rank_loss
     else:
         func = find_spar_loss
     ret_dict = compression(model, ps, base_model, args, fp, func)
-    if args.method == "tucker":
+    if args.compression_type == "tucker":
         ret_dict = {l: (ret_dict[l], 0) for l in ret_dict}
-    elif args.method == "spar":
+    elif args.compression_type == "spar":
         ret_dict = {l: (0, ret_dict[l]) for l in ret_dict}
     return ret_dict
 
