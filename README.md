@@ -18,14 +18,14 @@ As of now the project only supports TensorFlow and ResNet50. Finding compression
 
 This project implements a hybrid compression technique based on tensor decompositions with added sparsity. The decomposition technique in use is a modified version of a Tucker decomposition, and the pruning structure can be arbitrarily adjusted to fit the requirements of the target hardware. Each `Conv2D` layer is split into four smaller `Conv2D` layers as represented by the diagram below:
 
-[ADD DIAGRAM]
+![Decomposition Diagram](images/decomposition_diagram.png)
 
 This framework supports two compression approaches:
 
 - An evaluation led approach, where we fix the maximum acceptable loss of accuracy and maximise the compression factor. This approach requires access to a minimal test dataset.
 - A fixed compression approach, where the user defines a compression factor based on memory constraints or inference times, and the library aims to meet those constraints with minimal reconstruction loss. This approach does not require any data, but may lead to a severe degradation in accuracy if the hyper-parameters aren't chosen appropriately or the compression factor is too high.
 
-## Installation
+## Setup
 
 1. Clone this repository.
 2. Create a Python virtual environment and install dependancies:
@@ -90,9 +90,9 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
 ## TODO
 
-- finish readme
-- make into library
-- plot lots of stats
-- add 1x1 support
-- quantise?
-- test everything x1000
+- Convert repository to library
+- Generate comparison plots
+- Add support for memory-first optimisation
+- Add 1x1 ``Conv2D`` support
+- Benchmark quantisation methods
+- Add unit tests
