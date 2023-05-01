@@ -208,17 +208,7 @@ def fixed_params(model, ps, base_model, args):
     return pairs
 
 
-def main(args):
-    ps = get_pruning_structure(args)
-    base_model, model = get_resnet(args.input_path)
-    model.compile(metrics=["accuracy"])
-    if args.method == "fixed_loss":
-        pairs = fixed_loss(model, ps, base_model, args)
-    else:
-        pairs = fixed_params(model, ps, base_model, args)
-    ranks = [p[0] for p in pairs]
-    spars = [p[1] for p in pairs]
-    new_model = get_decomp_resnet(ranks, ps, spars, args.input_path)
+def convert_to_tflite(new_model, args):
     converter = tf.lite.TFLiteConverter.from_keras_model(new_model)
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.target_spec.supported_ops = [
@@ -232,6 +222,19 @@ def main(args):
     with open(args.output_path, "wb") as f:
         f.write(tflite_model)
 
+
+def main(args):
+    ps = get_pruning_structure(args)
+    base_model, model = get_resnet(args.input_path)
+    model.compile(metrics=["accuracy"])
+    if args.method == "fixed_loss":
+        pairs = fixed_loss(model, ps, base_model, args)
+    else:
+        pairs = fixed_params(model, ps, base_model, args)
+    ranks = [p[0] for p in pairs]
+    spars = [p[1] for p in pairs]
+    new_model = get_decomp_resnet(ranks, ps, spars, args.input_path)
+    new_model.save(f"{args.output_path}.h5")
     print(f"Compressed model saved to {args.output_path}")
 
 
