@@ -67,6 +67,7 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
     .
     ├── .gitignore                                # Git ignore file
+    ├── .gitattributes                            # LFS configuration file
     ├── models                                    # Model files
     |   ├── keras                                 # Keras SaveModel models
     │   └── lite                                  # TFLite models
