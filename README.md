@@ -32,6 +32,8 @@ pip install -r requirements.txt
 
 ## Usage
 
+To get started, you will need pre-trained ResNet50 weights of the same shape as the model defined in `src/model.py`. You may generate those weights using `scripts/train.py`, or load them from LFS. Model surgery for arbitrary model is planned but not supported yet.
+
 To compress ResNet50 with an evaluation-led approach with a maximum of 2% accuracy loss and unstructured sparsity, run the following command:
 
 ```
@@ -41,11 +43,11 @@ python scripts/compress.py --input_path /path/to/input/model_weights --output_pa
 The following pruning structures are implemented:
 
 - `--pruning_structure=unstructured` for unstructured sparsity
+- `--pruning_structure=filter` for filter sparsity (along the 4th axis)
+- `--pruning_structure=channel` for channel sparsity (along the 3rd axis)
 - `--pruning_structure=block` for block sparsity, in which case `--block_size` should be provided, determining the size of the block (e.g., `--block_size 2,2`)
 
-For a fixed compression approach, the user needs to provide a function determining the importance of each layer and a function to determine the reconstruction error.
-
-For example, to compress ResNet50 with a fixed compression factor of 0.5 and unstructured sparsity, run the following command:
+To compress ResNet50 with a fixed compression factor of 0.5 and unstructured sparsity, run the following command:
 
 ```
 python scripts/compress.py --input_path /path/to/input/model_weights --output_path /path/to/output/compressed_model.tflite --pruning_structure unstructured --method fixed_params --compression_factor 0.5
