@@ -43,6 +43,7 @@ class FixedLoss:
     pruning_structure: PruningStructure = PruningStructure()
     decomp_weight_func: Callable[float, float] = lambda x: x
     spar_weight_func: Callable[float, float] = lambda x: 4 * x
+    inv_spar_weight_func: Callable[float, float] = lambda x: x / 4
     eval_func: Callable[[Eval, Layer, np.array], bool] = test_weights_eval
 
 
@@ -154,7 +155,7 @@ def find_compression_loss(l: Layer, eval: Eval, fl: FixedLoss):
         if prop_w > best_score:
             eval.pbar.write("Breaking.")
             break
-        spar_limit = best_score - prop_w
+        spar_limit = fl.inv_spar_weight_func(best_score - prop_w)
         new_w, spar = find_sparsity(l, eval, default_w, spar_limit, rank, fl)
         spar_w = fl.spar_weight_func(spar / 100)
         tot_score = prop_w + spar_w

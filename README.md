@@ -66,7 +66,6 @@ Run `[SCRIPT NAME] --help` for more arguments.
 - add fixed params
 - make max loss work for fixed loss
 - make block work
-- for fixed loss: fix max sparsity with inv of sparsity function
 - finish readme
 - make into library
 - plot lots of stats
