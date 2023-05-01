@@ -16,6 +16,8 @@ from utils import (
     get_decomp_weight,
     get_weight,
     test_weights_eval,
+    find_rank_loss,
+    find_spar_loss,
 )
 import numpy as np
 import tensorflow as tf
@@ -89,6 +91,13 @@ def parse_args():
         type=float,
         default=4.0,
         help="Relative contribution of the sparse Conv2D layer with respect to sparsity",
+    )
+    parser.add_argument(
+        "--method",
+        type=str,
+        choices=["hybrid", "tucker", "spars"],
+        default="hybrid",
+        help="Compression method",
     )
     args = parser.parse_args()
     if args.pruning_structure == "block" and args.block_size is None:
@@ -248,7 +257,18 @@ def fixed_params(model, ps, base_model, args):
         inv_spar_weight_func=lambda x: x / args.sparsity_weight,
         spar_weight_func=lambda x: args.sparsity_weight * x,
     )
-    return compression(model, ps, base_model, args, fp, find_factors_params)
+    if args.method == "hybrid":
+        func = find_factors_params
+    elif args.method == "tucker":
+        func = find_rank_loss
+    else:
+        func = find_spar_loss
+    ret_dict = compression(model, ps, base_model, args, fp, func)
+    if args.method == "tucker":
+        ret_dict = {l: (ret_dict[l], 0) for l in ret_dict}
+    elif args.method == "spar":
+        ret_dict = {l: (0, ret_dict[l]) for l in ret_dict}
+    return ret_dict
 
 
 def convert_to_tflite(new_model, args):
