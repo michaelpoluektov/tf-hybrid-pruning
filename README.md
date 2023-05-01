@@ -1,6 +1,10 @@
 # tf-hybrid-pruning
 
-TB2 individual project -- exploring hybrid optimisation methods for data-free inference optimisations on mobile devices.
+TB2 individual project - exploring hybrid optimisation methods for data-free inference optimisations on mobile devices.
+
+### Acknoledgements
+
+I would like to thank XMOS for generously sponsoring this project and express my gratitude to Andrew Stanford-Jason for providing valuable insight.
 
 ## Motivation
 
@@ -8,7 +12,9 @@ The goal of this project is to create a data-free technique to compress Convolut
 
 ## Approach
 
-As of now the project only supports TensorFlow and ResNet50. Finding compression factors for other network architectures should be straightforward, but the user will need to define the decomposition block in the script that generates the model. This limitation will be rectified as soon as TensorFlow adds support for "model surgery", which is currently being worked according to a recent PR [ADD PR LINK].
+As of now the project only supports TensorFlow and ResNet50. Finding compression factors for other network architectures should be straightforward, but the user will need to define the decomposition block in the script that generates the model. This limitation will be rectified as soon as TensorFlow adds support for "model surgery", which is currently being worked according to comment on a [recent PR](https://github.com/keras-team/keras/issues/17569) from a TensorFlow contributor:
+
+> Frightera: Edit2 (05.04.23): I'll be working on this actively, this is half complete now.
 
 This project implements a hybrid compression technique based on tensor decompositions with added sparsity. The decomposition technique in use is a modified version of a Tucker decomposition, and the pruning structure can be arbitrarily adjusted to fit the requirements of the target hardware. Each `Conv2D` layer is split into four smaller `Conv2D` layers as represented by the diagram below:
 
