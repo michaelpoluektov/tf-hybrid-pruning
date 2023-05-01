@@ -90,9 +90,11 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
 ## TODO
 
+- Add Tucker/Sparsity only for comparison
+- Add LFS for model files
 - Convert repository to library
 - Generate comparison plots
 - Add support for memory-first optimisation
-- Add 1x1 ``Conv2D`` support
+- Add 1x1 `Conv2D` support
 - Benchmark quantisation methods
 - Add unit tests
