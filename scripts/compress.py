@@ -21,7 +21,7 @@ import tensorflow as tf
 from tqdm import tqdm
 from tensorflow.keras import mixed_precision
 
-# mixed_precision.set_global_policy("mixed_float16")
+mixed_precision.set_global_policy("mixed_float16")
 
 
 def parse_args():
@@ -133,7 +133,8 @@ def fixed_loss(model, ps, base_model, args):
         pbar=tqdm(total=len(layers)),
         base_accuracy=test_accuracy,
     )
-    pairs = find_factors_loss(base_model, layers, ev, fl)
+    # pairs = find_factors_loss(base_model, layers, ev, fl)
+    pairs = [(32, 10) for _ in range(16)]
     _, new_val = model.evaluate(val_ds, verbose=0)
     print(
         f"Found factors. Accuracy loss: test={(test_accuracy - ev.base_accuracy)*100:.2}%, val={(val_accuracy-new_val)*100:.2f}%"
@@ -162,6 +163,12 @@ def main(args):
     spars = [p[1] for p in pairs]
     new_model = get_decomp_resnet(ranks, ps, spars, args.input_path)
     converter = tf.lite.TFLiteConverter.from_keras_model(new_model)
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_ops = [
+        tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8,
+        tf.lite.OpsSet.TFLITE_BUILTINS,
+        tf.lite.OpsSet.SELECT_TF_OPS,
+    ]
     tflite_model = converter.convert()
 
     # Save the TFLite model to output_path
