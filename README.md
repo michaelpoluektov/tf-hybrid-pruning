@@ -32,20 +32,26 @@ pip install -r requirements.txt
 
 ## Usage
 
-To compress ResNet50 with an evaluation led approach with maximum 2% accuracy loss, and unstructured sparsity, run the following:
-[ADD COMMAND]
-The following pruning structures were implemented:
+To compress ResNet50 with an evaluation-led approach with a maximum of 2% accuracy loss and unstructured sparsity, run the following command:
 
-- `--unstructured` for unstructured sparsity
-- `--filter` for filter sparsity (prune kernel along the last axis)
-- `--channel` for channel sparsity (prune kernel along the third axis)
-- `--block=(size, size)` for block sparsity, where size determines the size of the block
-  For a fixed compression approach, the user needs to provide a function determining the importance of each layer and a function to determine the reconstruction error.
-  [MORE USAGE]
+```
+python scripts/compress.py --input_path /path/to/input/model_weights --output_path /path/to/output/compressed_model.tflite --pruning_structure unstructured --method fixed_loss --max_acc_loss 0.02
+```
 
-Run `[SCRIPT NAME] --help` for more arguments.
+The following pruning structures are implemented:
 
-##
+- `--pruning_structure=unstructured` for unstructured sparsity
+- `--pruning_structure=block` for block sparsity, in which case `--block_size` should be provided, determining the size of the block (e.g., `--block_size 2,2`)
+
+For a fixed compression approach, the user needs to provide a function determining the importance of each layer and a function to determine the reconstruction error.
+
+For example, to compress ResNet50 with a fixed compression factor of 0.5 and unstructured sparsity, run the following command:
+
+```
+python scripts/compress.py --input_path /path/to/input/model_weights --output_path /path/to/output/compressed_model.tflite --pruning_structure unstructured --method fixed_params --compression_factor 0.5
+```
+
+Run `python scripts/compress.py --help` for more arguments and usage information.
 
 ## File structure
 
