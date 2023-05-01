@@ -22,9 +22,9 @@ def get_resnet(ws_path=None):
     model.add(tf.keras.layers.Dense(100, activation="softmax"))
     ins = np.zeros(shape=(1, 32, 32, 3))
     _ = model(ins)
-    base_model.trainable = False
     if ws_path:
         model.load_weights(ws_path)
+    model.trainable = False
     return base_model, model
 
 
@@ -41,7 +41,7 @@ def _decomp_resnet(ranks):
     return model
 
 
-def get_decomp_resnet(ranks, spars, ws_path):
+def get_decomp_resnet(ranks, ps, spars, ws_path):
     model = _decomp_resnet(ranks)
     name_set = set([l.name for l in model.layers])
     base_model, model2 = get_resnet(ws_path)
@@ -58,7 +58,7 @@ def get_decomp_resnet(ranks, spars, ws_path):
             continue
         spar = spars[i]
         core, first, last, sp = get_decomp(
-            l.kernel.numpy(), (2, 3), [rank, rank], 100 - spar
+            l.kernel.numpy(), ps, (2, 3), rank, 100 - spar
         )
         model.get_layer(l.name + "_first").set_weights([np.expand_dims(first, [0, 1])])
         model.get_layer(l.name + "_core").set_weights([core])
@@ -73,8 +73,6 @@ def get_decomp_resnet(ranks, spars, ws_path):
         if l not in bias3 and "input" not in l.name:
             model.get_layer(l.name).set_weights(l.get_weights())
             name_set.remove(l.name)
-    model2_names = ["dense_2", "batch_normalization_1", "dense_3"]
-    model_names = ["dense", "batch_normalization", "dense_1"]
-    for m2, m in zip(model2_names, model_names):
-        model.get_layer(m).set_weights(model2.get_layer(m2).get_weights())
+    for i in range(-3, 0, 1):
+        model.layers[i].set_weights(model2.layers[i].get_weights())
     return model

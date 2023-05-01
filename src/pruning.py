@@ -18,6 +18,7 @@ def find_factors_loss(
         _, acc = eval.model.evaluate(eval.ds)
         eval.base_accuracy = acc
         compression_pairs[l] = best_pair
+        eval.pbar.update(1)
     return compression_pairs
 
 
@@ -28,4 +29,5 @@ def find_factors_params(
     for l in layers:
         _, best_pair = find_compression_params(l, eval, fp)
         compression_pairs[l] = best_pair
+        eval.pbar.update(1)
     return compression_pairs

@@ -134,10 +134,10 @@ def find_sparsity(
         else:
             spars = list(filter(lambda e: e > spar, spars))
     if max_spar == 100:
-        eval.pbar.write("Bad, returning...", end=" ")
+        eval.pbar.write("Bad, returning...")
         return default_w, 100.0
     elif max_spar == 0.0:
-        eval.pbar.write("No need for sparsity...", end=" ")
+        eval.pbar.write("No need for sparsity...")
         return best_w, 0.0
     else:
         eval.pbar.write(f"Found sparsity: {max_spar:.1f}%")
@@ -185,6 +185,9 @@ def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
             min_loss = loss
             best_pair = rank, spar
             best_w = new_k
+            eval.pbar.write(f"Yes, sparsity: {spar:.2f}.")
+        else:
+            eval.pbar.write("No.")
     return best_w, best_pair
 
 

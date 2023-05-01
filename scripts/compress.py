@@ -2,15 +2,26 @@ import sys
 import os
 
 sys.path.append("../src")
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import argparse
 from pruning import find_factors_loss, find_factors_params
 from model import get_resnet, get_decomp_resnet
 from dataset import get_dataset
-from utils import FixedLoss, FixedParams, Eval, PruningStructure
+from utils import (
+    FixedLoss,
+    FixedParams,
+    Eval,
+    PruningStructure,
+    get_decomp_weight,
+    get_weight,
+)
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
+from tensorflow.keras import mixed_precision
+
+# mixed_precision.set_global_policy("mixed_float16")
 
 
 def parse_args():
@@ -104,8 +115,7 @@ def get_pruning_structure(args):
         raise NotImplementedError("block structure is not implemented yet")
 
 
-def fixed_loss(model, base_model, args):
-    ps = get_pruning_structure(args)
+def fixed_loss(model, ps, base_model, args):
     fl = FixedLoss(ps)
     layers = [
         l
@@ -116,7 +126,7 @@ def fixed_loss(model, base_model, args):
     print("Evaluating model...", end=" ")
     _, val_accuracy = model.evaluate(val_ds, verbose=0)
     _, test_accuracy = model.evaluate(test_ds, verbose=0)
-    print(f"Accuracy: val={val_accuracy:.2f}, test={test_accuracy:.2f}")
+    print(f"Accuracy: val={val_accuracy*100:.2f}%, test={test_accuracy*100:.2f}%")
     ev = Eval(
         model=model,
         ds=test_ds,
@@ -126,24 +136,31 @@ def fixed_loss(model, base_model, args):
     pairs = find_factors_loss(base_model, layers, ev, fl)
     _, new_val = model.evaluate(val_ds, verbose=0)
     print(
-        f"Found factors. Accuracy loss: test={test_accuracy - ev.base_accuracy:.2}, val={val_accuracy-new_val:.2f}"
+        f"Found factors. Accuracy loss: test={(test_accuracy - ev.base_accuracy)*100:.2}%, val={(val_accuracy-new_val)*100:.2f}%"
     )
+    print("FACTORS:")
+    for l, (r, s) in zip(layers, pairs):
+        print(
+            f"{l.name}: rank={r} ({fl.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%), sparsity={s:.2f}% ({fl.spar_weight_func(s)}%)"
+        )
     return pairs
 
 
-def fixed_params(model, base_model, args):
+def fixed_params(model, ps, base_model, args):
     pass
 
 
 def main(args):
+    ps = get_pruning_structure(args)
     base_model, model = get_resnet(args.input_path)
+    model.compile(metrics=["accuracy"])
     if args.method == "fixed_loss":
-        pairs = fixed_loss(model, base_model, args)
+        pairs = fixed_loss(model, ps, base_model, args)
     else:
-        pairs = fixed_params(model, base_model, args)
+        pairs = fixed_params(model, ps, base_model, args)
     ranks = [p[0] for p in pairs]
     spars = [p[1] for p in pairs]
-    new_model = get_decomp_resnet(ranks, spars, args.input_path)
+    new_model = get_decomp_resnet(ranks, ps, spars, args.input_path)
     converter = tf.lite.TFLiteConverter.from_keras_model(new_model)
     tflite_model = converter.convert()
 

@@ -10,7 +10,7 @@ The goal of this project is to create a data-free technique to compress Convolut
 
 As of now the project only supports TensorFlow and ResNet50. Finding compression factors for other network architectures should be straightforward, but the user will need to define the decomposition block in the script that generates the model. This limitation will be rectified as soon as TensorFlow adds support for "model surgery", which is currently being worked according to a recent PR [ADD PR LINK].
 
-This project implements a hybrid compression technique based on tensor decompositions with added sparsity. The decomposition technique in use is a modified version of a Tucker decomposition, and the pruning structure can be arbitrarily adjusted to fit the requirements of the target hardware. Each ``Conv2D`` layer is split into four smaller ``Conv2D`` layers as represented by the diagram below:
+This project implements a hybrid compression technique based on tensor decompositions with added sparsity. The decomposition technique in use is a modified version of a Tucker decomposition, and the pruning structure can be arbitrarily adjusted to fit the requirements of the target hardware. Each `Conv2D` layer is split into four smaller `Conv2D` layers as represented by the diagram below:
 
 [ADD DIAGRAM]
 
@@ -35,14 +35,15 @@ pip install -r requirements.txt
 To compress ResNet50 with an evaluation led approach with maximum 2% accuracy loss, and unstructured sparsity, run the following:
 [ADD COMMAND]
 The following pruning structures were implemented:
-- ``--unstructured`` for unstructured sparsity
-- ``--filter`` for filter sparsity (prune kernel along the last axis)
-- ``--channel`` for channel sparsity (prune kernel along the third axis)
-- ``--block=(size, size)`` for block sparsity, where size determines the size of the block
-For a fixed compression approach, the user needs to provide a function determining the importance of each layer and a function to determine the reconstruction error. 
-[MORE USAGE]
 
-Run ``[SCRIPT NAME] --help`` for more arguments.
+- `--unstructured` for unstructured sparsity
+- `--filter` for filter sparsity (prune kernel along the last axis)
+- `--channel` for channel sparsity (prune kernel along the third axis)
+- `--block=(size, size)` for block sparsity, where size determines the size of the block
+  For a fixed compression approach, the user needs to provide a function determining the importance of each layer and a function to determine the reconstruction error.
+  [MORE USAGE]
+
+Run `[SCRIPT NAME] --help` for more arguments.
 
 ##
 
@@ -53,9 +54,22 @@ Run ``[SCRIPT NAME] --help`` for more arguments.
 >
 
     .
-    ├──                     
+    ├──
     ├── notebooks/                       # Pruning on a CIFAR model
     ├── src/                  # Used to test if the installation
     └── README.md
 
 >
+
+## TODO
+
+- add fixed params
+- make max loss work for fixed loss
+- make block work
+- for fixed loss: fix max sparsity with inv of sparsity function
+- finish readme
+- make into library
+- plot lots of stats
+- add 1x1 support
+- quantise?
+- test everything x1000
