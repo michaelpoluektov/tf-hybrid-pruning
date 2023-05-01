@@ -297,7 +297,7 @@ def main(args):
     ranks = [p[0] for p in pairs]
     spars = [p[1] for p in pairs]
     new_model = get_decomp_resnet(ranks, ps, spars, args.input_path)
-    new_model.save(f"{args.output_path}.h5")
+    new_model.save(f"{args.output_path}")
     print(f"Compressed model saved to {args.output_path}")
 
 
