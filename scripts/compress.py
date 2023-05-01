@@ -21,8 +21,14 @@ import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
 from tensorflow.keras import mixed_precision
+from tensorflow.keras import Model
+from tensorflow.keras.layers import Layer
+from typing import Union, Callable, TypeVar
 
 mixed_precision.set_global_policy("mixed_float16")
+
+
+FP = TypeVar("FP", FixedLoss, FixedParams)
 
 
 def tuple_of_ints(value):
@@ -180,13 +186,16 @@ def get_layers(base_model):
     ]
 
 
-def fixed_loss(model, ps, base_model, args):
-    fl = FixedLoss(
-        ps,
-        eval_func=get_loss_eval_func(args),
-        inv_spar_weight_func=lambda x: x / args.sparsity_weight,
-        spar_weight_func=lambda x: args.sparsity_weight * x,
-    )
+def compression(
+    model: Model,
+    ps: PruningStructure,
+    base_model: Model,
+    args: argparse.Namespace,
+    fp: FP,
+    comp_dict_func: Callable[
+        [Model, list[Layer], Eval, FP], dict[Layer, tuple[int, float]]
+    ],
+):
     layers = get_layers(base_model)
     test_ds, val_ds = get_dataset(False, 224, 1, 16, True)
     print("Evaluating model...", end=" ")
@@ -199,28 +208,37 @@ def fixed_loss(model, ps, base_model, args):
         pbar=tqdm(total=len(layers)),
         base_accuracy=test_accuracy,
     )
-    comp_dict = find_factors_loss(base_model, layers, ev, fl)
+    comp_dict = comp_dict_func(base_model, layers, ev, fp)
     _, new_val = model.evaluate(val_ds, verbose=0)
     print(
-        f"Found factors. Accuracy loss: test={(test_accuracy - ev.base_accuracy)*100:.2}%, val={(val_accuracy-new_val)*100:.2f}%"
+        "Found factors. Accuracy loss: test"
+        + f"={(test_accuracy - ev.base_accuracy)*100:.2}%, "
+        + f"val={(val_accuracy-new_val)*100:.2f}%"
     )
     print("FACTORS:")
     for l in comp_dict:
         r, s = comp_dict[l]
         print(
-            f"{l.name}: rank={r} ({fl.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%), sparsity={s:.2f}% ({fl.spar_weight_func(s):.2f}%)"
+            f"{l.name}: rank={r} "
+            + f"({fp.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%), "
+            + f"sparsity={s:.2f}% ({fp.spar_weight_func(s):.2f}%)"
         )
     pairs = [comp_dict[l] for l in layers]
     return pairs
 
 
+def fixed_loss(model, ps, base_model, args):
+    fl = FixedLoss(
+        ps,
+        eval_func=get_loss_eval_func(args),
+        inv_spar_weight_func=lambda x: x / args.sparsity_weight,
+        spar_weight_func=lambda x: args.sparsity_weight * x,
+    )
+    return compression(model, ps, base_model, args, fl, find_factors_loss)
+
+
 def fixed_params(model, ps, base_model, args):
     layers = get_layers(base_model)
-    test_ds, val_ds = get_dataset(False, 224, 1, 16, True)
-    print("Evaluating model...", end=" ")
-    _, val_accuracy = model.evaluate(val_ds, verbose=0)
-    _, test_accuracy = model.evaluate(test_ds, verbose=0)
-    print(f"Accuracy: val={val_accuracy*100:.2f}%, test={test_accuracy*100:.2f}%")
     stds = np.array([l.kernel.numpy().std() for l in layers])
     ws = np.clip(stds / np.sum(stds) * len(layers) * args.compression_factor, 0, 1)
     weight_dict = {l: w for l, w in zip(layers, ws)}
@@ -230,25 +248,7 @@ def fixed_params(model, ps, base_model, args):
         inv_spar_weight_func=lambda x: x / args.sparsity_weight,
         spar_weight_func=lambda x: args.sparsity_weight * x,
     )
-    ev = Eval(
-        model=model,
-        ds=test_ds,
-        pbar=tqdm(total=len(layers)),
-        base_accuracy=test_accuracy,
-    )
-    comp_dict = find_factors_params(base_model, layers, ev, fp)
-    _, new_val = model.evaluate(val_ds, verbose=0)
-    print(
-        f"Found factors. Accuracy loss: test={(test_accuracy - ev.base_accuracy)*100:.2}%, val={(val_accuracy-new_val)*100:.2f}%"
-    )
-    print("FACTORS:")
-    for l in comp_dict:
-        r, s = comp_dict[l]
-        print(
-            f"{l.name}: rank={r} ({fp.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%), sparsity={s:.2f}% ({fp.spar_weight_func(s):.2f}%)"
-        )
-    pairs = [comp_dict[l] for l in layers]
-    return pairs
+    return compression(model, ps, base_model, args, fp, find_factors_params)
 
 
 def convert_to_tflite(new_model, args):

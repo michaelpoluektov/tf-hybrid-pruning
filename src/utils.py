@@ -198,6 +198,41 @@ def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
     return best_w, best_pair
 
 
+def find_rank_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.array, int]:
+    k = l.kernel.numpy()
+    c = k.shape[-1]
+    ranks = get_props(c)
+    min_idx, max_idx = 0, len(ranks) - 1
+    best_w, best_rank = k, 0
+    while max_idx - min_idx > 1:
+        cur_idx = (max_idx - min_idx) // 2
+        rank = ranks[cur_idx]
+        new_w = get_compressed_weights(l, rank=rank)
+        if fl.eval_func(eval, l, new_w):
+            best_w, best_rank = k, rank
+            max_idx = cur_idx
+        else:
+            min_idx = cur_idx
+    return best_w, best_rank
+
+
+def find_spar_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.array, float]:
+    k = l.kernel.numpy()
+    spars = [i for i in range(1, 100) if i < fl.inv_spar_weight_func(100)]
+    min_idx, max_idx = 0, len(spars) - 1
+    best_w, best_spar = k, 100
+    while max_idx - min_idx > 1:
+        cur_idx = (max_idx - min_idx) // 2
+        spar = spars[cur_idx]
+        new_w = get_whatif(k, fl.pruning_structure, rank=0, spar=spar)
+        if fl.eval_func(eval, l, new_w):
+            best_w, best_spar = k, spar
+            max_idx = cur_idx
+        else:
+            min_idx = cur_idx
+    return best_w, best_spar
+
+
 def get_weight(layer: tf.keras.layers.Conv2D) -> float:
     return np.prod(np.array(layer.kernel.shape)) * np.prod(layer.output_shape[1:-1])
 
