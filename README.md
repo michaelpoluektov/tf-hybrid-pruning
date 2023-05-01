@@ -49,15 +49,28 @@ Run `[SCRIPT NAME] --help` for more arguments.
 
 ## File structure
 
-[FINISH FILE STRUCTURE]
-
 >
 
     .
-    ├──
-    ├── notebooks/                       # Pruning on a CIFAR model
-    ├── src/                  # Used to test if the installation
-    └── README.md
+    ├── .gitignore                                # Git ignore file
+    ├── models                                    # Model files
+    |   ├── keras                                 # Keras SaveModel models
+    │   └── lite                                  # TFLite models
+    ├── notebooks                                 # Jupyter notebooks
+    │   └── Test.ipynb                            # Testing and EDA
+    ├── README.md                                 # This file
+    ├── requirements.txt                          # Package dependencies
+    ├── scripts                                   # Scripts for various tasks
+    │   ├── benchmarks.sh                         # Benchmarking script (loop over compress.py)
+    │   ├── compress.py                           # Main compression script
+    │   ├── data.py                               # Data visualisation
+    │   └── train.py                              # Training script, generate base model
+    └── src                                       # Source code
+        ├── custom_resnet.py                      # Code to generate custom ResNet50 model with decompositions
+        ├── dataset.py                            # Custom Dataset object for CIFAR-100
+        ├── model.py                              # Generate base model compatible with CIFAR-100
+        ├── pruning.py                            # Pruning loop
+        └── utils.py                              # Various utilities and datastructes
 
 >
 
