@@ -27,7 +27,10 @@ def find_factors_params(
 ):
     compression_pairs = {}
     for l in layers:
-        _, best_pair = find_compression_params(l, eval, fp)
+        best_w, best_pair = find_compression_params(l, eval, fp)
+        l.set_weights([best_w, l.bias.numpy()])
+        _, acc = eval.model.evaluate(eval.ds)
+        eval.base_accuracy = acc
         compression_pairs[l] = best_pair
         eval.pbar.update(1)
     return compression_pairs

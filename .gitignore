@@ -140,3 +140,4 @@ cifar/layers
 *.jpeg
 *.jpg
 *.png
+*.tflite

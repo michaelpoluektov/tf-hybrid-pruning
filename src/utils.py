@@ -52,6 +52,7 @@ class FixedParams:
     weight_dict: dict[Layer, float]
     pruning_structure: PruningStructure = PruningStructure()
     decomp_weight_func: Callable[float, float] = lambda x: x
+    spar_weight_func: Callable[float, float] = lambda x: x * 4
     inv_spar_weight_func: Callable[float, float] = lambda x: x / 4
     eval_func: Callable[[Eval, Layer, np.array], float] = lambda e, l, k: np.mean(
         (l.kernel.numpy() - k) ** 2
@@ -172,14 +173,16 @@ def find_compression_loss(l: Layer, eval: Eval, fl: FixedLoss):
 
 def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
     default_w = l.kernel.numpy()
-    ranks = get_props(default_w)
+    ranks = get_props(default_w.shape[-1])
     min_loss = 1e31
     best_pair = 0, 100
     best_w = default_w
     for i, rank in enumerate(ranks):
-        eval.pbar.write(f"Testing Rank: {rank}...", end=" ")
         prop_w = fp.decomp_weight_func(get_decomp_weight(l, rank) / get_weight(l))
-        spar = fp.inv_spar_weight_func(1 - prop_w)
+        if prop_w > fp.weight_dict[l]:
+            break
+        eval.pbar.write(f"Testing Rank: {rank}...", end=" ")
+        spar = fp.inv_spar_weight_func(fp.weight_dict[l] - prop_w) * 100
         new_k = get_whatif(default_w, fp.pruning_structure, rank=rank, spar=100 - spar)
         loss = fp.eval_func(eval, l, new_k)
         if loss < min_loss:
@@ -189,6 +192,9 @@ def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
             eval.pbar.write(f"Yes, sparsity: {spar:.2f}.")
         else:
             eval.pbar.write("No.")
+    eval.pbar.write(
+        f"Best pair: decomposition = {best_pair[0]}, sparsity = {best_pair[1]:2f}%"
+    )
     return best_w, best_pair
 
 
