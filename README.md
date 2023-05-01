@@ -90,11 +90,20 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
 ## TODO
 
-- Add Tucker/Sparsity only for comparison
-- Add LFS for model files
+### REPO
+
+- Optimise `get\_whatif`
+- Different size datasets first!
+- Save factors separately
 - Convert repository to library
 - Generate comparison plots
 - Add support for memory-first optimisation
 - Add 1x1 `Conv2D` support
 - Benchmark quantisation methods
 - Add unit tests
+- Type checking
+
+### REPORT
+
+- Examples
+- Change outdated section on structure
