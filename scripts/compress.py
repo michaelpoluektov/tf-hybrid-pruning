@@ -133,8 +133,7 @@ def fixed_loss(model, ps, base_model, args):
         pbar=tqdm(total=len(layers)),
         base_accuracy=test_accuracy,
     )
-    # pairs = find_factors_loss(base_model, layers, ev, fl)
-    pairs = [(32, 10) for _ in range(16)]
+    pairs = find_factors_loss(base_model, layers, ev, fl)
     _, new_val = model.evaluate(val_ds, verbose=0)
     print(
         f"Found factors. Accuracy loss: test={(test_accuracy - ev.base_accuracy)*100:.2}%, val={(val_accuracy-new_val)*100:.2f}%"
