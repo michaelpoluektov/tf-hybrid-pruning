@@ -3,7 +3,6 @@ from tensorly.tenalg.svd import svd_interface
 from tensorly.base import unfold
 from tensorly.tenalg import multi_mode_dot
 from math import sqrt
-from time import time
 import numpy as np
 
 
@@ -36,7 +35,7 @@ def partial_tucker_spar(
     modes=(2, 3),
     spar=90,
     n_iter_max=100,
-    tol=1e-5,
+    tol=1e-3,
     svd_mask_repeats=5,
 ):
     core, factors = initialize_tucker(
