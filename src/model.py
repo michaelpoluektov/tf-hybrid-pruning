@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from utils import get_decomp
+from custom_tucker import partial_tucker_spar
 
 # from sparse_conv2d import SparseConv2D, clone_function
 from custom_resnet import ResNet50
@@ -57,8 +57,8 @@ def get_decomp_resnet(ranks, ps, spars, ws_path):
             name_set.remove(l.name)
             continue
         spar = spars[i]
-        core, first, last, sp = get_decomp(
-            l.kernel.numpy(), ps, (2, 3), rank, 100 - spar
+        core, first, last, sp = partial_tucker_spar(
+            l.kernel.numpy(), rank, (2, 3), 100 - spar, ps
         )
         model.get_layer(l.name + "_first").set_weights([np.expand_dims(first, [0, 1])])
         model.get_layer(l.name + "_core").set_weights([core])

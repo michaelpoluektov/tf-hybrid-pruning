@@ -40,6 +40,10 @@ def partial_tucker_spar(
     tol=1e-3,
     svd_mask_repeats=5,
 ):
+    if isinstance(rank, int):
+        rank = (rank, rank)
+    else:
+        rank = tuple(rank)
     core, factors = initialize_tucker(
         tensor,
         rank,
