@@ -7,6 +7,7 @@ import numpy as np
 from typing import Callable
 from tensorflow.keras.layers import Layer
 from structures import PruningStructure, FixedLoss, FixedParams, Eval
+from custom_tucker import partial_tucker_spar
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -22,29 +23,6 @@ def get_props(c: int):
     return [m * i for i in range(4, 15)]  # THIS WAS (1, 13)
 
 
-def get_decomp(
-    k: np.ndarray,
-    structure: PruningStructure,
-    modes: tuple[int, int] = (2, 3),
-    rank: int = 1,
-    spar: float = 90.0,
-):
-    rank = [rank, rank]
-    (core, factors), _ = partial_tucker(k, modes=modes, rank=rank)
-    b = tl.tenalg.multi_mode_dot(core, factors, modes)
-    for _ in range(5):
-        diff = structure.reduce_ker(abs(k - b))
-        t = np.percentile(diff, spar)
-        mask = structure.transform_mask(diff >= t, k.shape)
-        c = k.copy()
-        c[mask] = b[mask]
-        (core, factors), _ = partial_tucker(c, modes=modes, rank=rank)
-        b = tl.tenalg.multi_mode_dot(core, factors, modes=modes)
-    sp = np.zeros(k.shape)
-    sp[mask] = k[mask] - b[mask]
-    return core, *factors, sp.astype(np.float32)
-
-
 def get_whatif(
     k: np.ndarray,
     structure: PruningStructure,
@@ -53,7 +31,7 @@ def get_whatif(
     spar: float = 90.0,
 ):
     if rank:
-        core, first, last, sp = get_decomp(k, structure, modes, rank, spar)
+        core, first, last, sp = partial_tucker_spar(k, rank, modes, spar, structure)
         b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
         return b + sp
     else:
@@ -270,12 +248,6 @@ def decomp_only_stats(l, eval):
             l.set_weights([w, l.bias.numpy()])
             return get_decomp_weight(l, [r, r]) / get_weight(l), acc
     return 1, eval.base_accuracy
-
-
-def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
-    core, first, last, _ = get_decomp(k, None, modes, rank, spar)
-    b = tl.tenalg.multi_mode_dot(core, (first, last), modes=modes)
-    return b
 
 
 def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.ndarray, int]:
