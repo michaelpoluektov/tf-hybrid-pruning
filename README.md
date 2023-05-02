@@ -93,10 +93,8 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
 ### REPO
 
-- Optimise `get\_whatif`
 - Different size datasets first!
 - Save factors separately
-- Argparse for TFLite converter
 - Convert repository to library
 - Generate comparison plots
 - Add support for memory-first optimisation
