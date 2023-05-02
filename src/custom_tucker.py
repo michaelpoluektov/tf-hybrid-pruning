@@ -1,3 +1,14 @@
+# Author: Jean Kossaifi <jean.kossaifi+tensors@gmail.com>
+#
+# License: BSD 3 clause
+#
+# Copied from the TensorLy library's source code
+# Summary of changes:
+# Removed unused parameters for simplicity
+# Added support for decompositions taking structured sparsity into account
+# For partial_tucker, renamed it to partial_tucker_spar
+
+
 import tensorly as tl
 from tensorly.tenalg.svd import svd_interface
 from tensorly.base import unfold
