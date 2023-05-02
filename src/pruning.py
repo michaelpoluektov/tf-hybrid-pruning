@@ -1,12 +1,10 @@
 from utils import (
-    Eval,
-    FixedLoss,
-    FixedParams,
     find_compression_loss,
     find_compression_params,
     find_rank_loss,
     find_spar_loss,
 )
+from structures import Eval, FixedLoss, FixedParams
 import tensorflow.keras as K
 import numpy as np
 from typing import Callable, TypeVar

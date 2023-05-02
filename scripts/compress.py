@@ -9,16 +9,12 @@ from pruning import find_factors_loss, find_factors_params
 from model import get_resnet, get_decomp_resnet
 from dataset import get_dataset
 from utils import (
-    FixedLoss,
-    FixedParams,
-    Eval,
-    PruningStructure,
     get_decomp_weight,
     get_weight,
-    test_weights_eval,
     find_rank_loss,
     find_spar_loss,
 )
+from structures import FixedLoss, FixedParams, Eval, test_weights_eval, PruningStructure
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm

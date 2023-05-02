@@ -4,6 +4,7 @@ from tensorly.base import unfold
 from tensorly.tenalg import multi_mode_dot
 from math import sqrt
 import numpy as np
+from structures import PruningStructure
 
 
 def initialize_tucker(
@@ -34,6 +35,7 @@ def partial_tucker_spar(
     rank,
     modes=(2, 3),
     spar=90,
+    ps: PruningStructure = PruningStructure(),
     n_iter_max=100,
     tol=1e-3,
     svd_mask_repeats=5,
@@ -63,9 +65,9 @@ def partial_tucker_spar(
             factors[index] = eigenvecs
         core = multi_mode_dot(t_copy, factors, modes=modes, transpose=True)
         t_approx = multi_mode_dot(core, factors, modes=modes)
-        diff = abs(t_approx - tensor)
+        diff = ps.reduce_ker(abs(t_approx - tensor))
         t = np.percentile(diff, spar)
-        mask = diff > t
+        mask = ps.transform_mask(diff > t)
         t_copy = tensor.copy()
         t_copy[mask] = t_approx[mask]
         rec_error = sqrt(abs(norm_tensor**2 - tl.norm(core, 2) ** 2)) / norm_tensor
