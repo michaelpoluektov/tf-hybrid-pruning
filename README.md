@@ -38,7 +38,7 @@ pip install -r requirements.txt
 
 ## Usage
 
-To get started, you will need pre-trained ResNet50 weights of the same shape as the model defined in `src/model.py`. You may generate those weights using `scripts/train.py`, or load them from LFS. Model surgery for arbitrary model is planned but not supported yet.
+To get started, you will need pre-trained ResNet50 weights of the same shape as the model defined in `src/model.py`. You may generate those weights using `scripts/train.py`, or load them from LFS. Model surgery for arbitrary models is planned but not supported yet.
 
 To compress ResNet50 with an evaluation-led approach with a maximum of 2% accuracy loss and unstructured sparsity, run the following command:
 
@@ -67,6 +67,7 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
     .
     ├── .gitignore                                # Git ignore file
+    ├── .gitattributes                            # LFS configuration file
     ├── models                                    # Model files
     |   ├── keras                                 # Keras SaveModel models
     │   └── lite                                  # TFLite models
