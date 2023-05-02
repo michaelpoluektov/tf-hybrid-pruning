@@ -12,7 +12,7 @@ The goal of this project is to create a data-free technique to compress Convolut
 
 ## Approach
 
-As of now the project only supports TensorFlow and ResNet50. Finding compression factors for other network architectures should be straightforward, but the user will need to define the decomposition block in the script that generates the model. This limitation will be rectified as soon as TensorFlow adds support for "model surgery", which is currently being worked according to comment on a [recent PR](https://github.com/keras-team/keras/issues/17569) from a TensorFlow contributor:
+As of now the project only supports TensorFlow and ResNet50. Finding compression factors for other network architectures should be straightforward, but the user will need to define the decomposition block in the script that generates the model. This limitation will be rectified as soon as TensorFlow adds support for "model surgery", which is currently being worked according to comment on a [recent issue](https://github.com/keras-team/keras/issues/17569) from a TensorFlow contributor:
 
 > Frightera: Edit2 (05.04.23): I'll be working on this actively, this is half complete now.
 
@@ -95,6 +95,7 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 - Optimise `get\_whatif`
 - Different size datasets first!
 - Save factors separately
+- Argparse for TFLite converter
 - Convert repository to library
 - Generate comparison plots
 - Add support for memory-first optimisation
@@ -102,8 +103,10 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 - Benchmark quantisation methods
 - Add unit tests
 - Type checking
+- Code for DeepDream
 
 ### REPORT
 
 - Examples
-- Change outdated section on structure
+- Change outdated naive results
+- ReLU in DeepDream plots
