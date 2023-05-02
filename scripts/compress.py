@@ -46,7 +46,9 @@ def tuple_of_ints(value):
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Optimise model and convert to TFLite")
+    parser = argparse.ArgumentParser(
+        description="Optimise model and convert to SavedModel"
+    )
     parser.add_argument(
         "--input_path", type=str, required=True, help="Path to the input model weights"
     )
@@ -54,7 +56,7 @@ def parse_args():
         "--output_path",
         type=str,
         required=True,
-        help="Path to save the compressed TFLite model",
+        help="Path to save the compressed SavedModel model",
     )
     parser.add_argument(
         "--pruning_structure",
@@ -269,21 +271,6 @@ def fixed_params(model, ps, base_model, args):
     elif args.compression_type == "spar":
         ret_dict = {l: (0, ret_dict[l]) for l in ret_dict}
     return ret_dict
-
-
-def convert_to_tflite(new_model, args):
-    converter = tf.lite.TFLiteConverter.from_keras_model(new_model)
-    converter.optimizations = [tf.lite.Optimize.DEFAULT]
-    converter.target_spec.supported_ops = [
-        tf.lite.OpsSet.EXPERIMENTAL_TFLITE_BUILTINS_ACTIVATIONS_INT16_WEIGHTS_INT8,
-        tf.lite.OpsSet.TFLITE_BUILTINS,
-        tf.lite.OpsSet.SELECT_TF_OPS,
-    ]
-    tflite_model = converter.convert()
-
-    # Save the TFLite model to output_path
-    with open(args.output_path, "wb") as f:
-        f.write(tflite_model)
 
 
 def main(args):
