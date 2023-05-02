@@ -67,7 +67,7 @@ def partial_tucker_spar(
         t_approx = multi_mode_dot(core, factors, modes=modes)
         diff = ps.reduce_ker(abs(t_approx - tensor))
         t = np.percentile(diff, spar)
-        mask = ps.transform_mask(diff > t)
+        mask = ps.transform_mask(diff > t, tensor.shape)
         t_copy = tensor.copy()
         t_copy[mask] = t_approx[mask]
         rec_error = sqrt(abs(norm_tensor**2 - tl.norm(core, 2) ** 2)) / norm_tensor

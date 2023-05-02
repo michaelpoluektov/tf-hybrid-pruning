@@ -14,7 +14,7 @@ from utils import (
     find_rank_loss,
     find_spar_loss,
 )
-from structures import FixedLoss, FixedParams, Eval, test_weights_eval, PruningStructure
+from structures import *
 import numpy as np
 import tensorflow as tf
 from tqdm import tqdm
@@ -124,58 +124,11 @@ def get_pruning_structure(args):
     if args.pruning_structure == "unstructured":
         return PruningStructure()
     elif args.pruning_structure == "channel":
-
-        def reduce_ker(k):
-            return np.mean(k, axis=2)
-
-        def transform_mask(mask, shape):
-            mask_expanded = mask[:, :, np.newaxis, :]
-            return np.broadcast_to(mask_expanded, shape)
-
-        return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+        return get_channel_ps()
     elif args.pruning_structure == "filter":
-
-        def reduce_ker(k):
-            return np.mean(k, axis=3)
-
-        def transform_mask(mask, shape):
-            mask_expanded = mask[:, :, :, np.newaxis]
-            return np.broadcast_to(mask_expanded, shape)
-
-        return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+        return get_filter_ps()
     elif args.pruning_structure == "block":
-        block_size = args.block_size
-        if 64 % block_size[0] != 0 or 64 % block_size[1] != 0:
-            raise AttributeError(
-                f"Invalid shape for block structure: must be a factor of 64, got {block_size}"
-            )
-
-        def get_k_shape(k_shape, block_size):
-            return (
-                k_shape[:2]
-                + (k_shape[2] // block_size[0], block_size[0])
-                + (k_shape[3] // block_size[1], block_size[1])
-            )
-
-        def reduce_ker(k):
-            new_k_shape = get_k_shape(k.shape, block_size)
-            new_k = k.reshape(new_k_shape)
-            return np.mean(new_k, axis=(3, 5))
-
-        def transform_mask(mask, shape):
-            mask_expanded = mask[:, :, :, np.newaxis, :, np.newaxis]
-            broadcast_shape = mask_expanded.shape[:3] + (
-                block_size[0],
-                mask_expanded.shape[4],
-                block_size[1],
-            )
-            broadcast_mask = np.broadcast_to(mask_expanded, broadcast_shape)
-            return broadcast_mask.reshape(shape)
-
-        return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
-
-    else:
-        raise NotImplementedError("block structure is not implemented yet")
+        return get_block_ps(args.block_size)
 
 
 def get_loss_eval_func(args):

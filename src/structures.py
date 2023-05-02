@@ -51,3 +51,56 @@ class FixedParams:
     eval_func: Callable[[Eval, Layer, ndarray], float] = lambda e, l, k: np.mean(
         (l.kernel.numpy() - k) ** 2
     )
+
+
+def get_channel_ps():
+    def reduce_ker(k):
+        return np.mean(k, axis=2)
+
+    def transform_mask(mask, shape):
+        mask_expanded = mask[:, :, np.newaxis, :]
+        return np.broadcast_to(mask_expanded, shape)
+
+    return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+
+
+def get_filter_ps():
+    def reduce_ker(k):
+        return np.mean(k, axis=3)
+
+    def transform_mask(mask, shape):
+        mask_expanded = mask[:, :, :, np.newaxis]
+        return np.broadcast_to(mask_expanded, shape)
+
+    return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
+
+
+def get_block_ps(block_size):
+    if 64 % block_size[0] != 0 or 64 % block_size[1] != 0:
+        raise AttributeError(
+            f"Invalid shape for block structure: must be a factor of 64, got {block_size}"
+        )
+
+    def get_k_shape(k_shape, block_size):
+        return (
+            k_shape[:2]
+            + (k_shape[2] // block_size[0], block_size[0])
+            + (k_shape[3] // block_size[1], block_size[1])
+        )
+
+    def reduce_ker(k):
+        new_k_shape = get_k_shape(k.shape, block_size)
+        new_k = k.reshape(new_k_shape)
+        return np.mean(new_k, axis=(3, 5))
+
+    def transform_mask(mask, shape):
+        mask_expanded = mask[:, :, :, np.newaxis, :, np.newaxis]
+        broadcast_shape = mask_expanded.shape[:3] + (
+            block_size[0],
+            mask_expanded.shape[4],
+            block_size[1],
+        )
+        broadcast_mask = np.broadcast_to(mask_expanded, broadcast_shape)
+        return broadcast_mask.reshape(shape)
+
+    return PruningStructure(reduce_ker=reduce_ker, transform_mask=transform_mask)
