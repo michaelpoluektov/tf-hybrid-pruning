@@ -123,13 +123,13 @@ def find_sparsity(
     spars = get_spars(spar_limit * 100)
     max_spar = 100.0
     best_w = default_w
-    tested_max = False
+    # tested_max = False
     while spars:
-        if not tested_max:
-            spar = spars[-1]
-            tested_max = True
-        else:
-            spar = spars[len(spars) // 2]
+        # if not tested_max:
+        #     spar = spars[-1]
+        #     tested_max = True
+        # else:
+        spar = spars[len(spars) // 2]
         new_w = get_whatif(
             l.kernel.numpy(), fl.pruning_structure, (2, 3), rank, 100 - spar
         )
