@@ -21,7 +21,7 @@ class Eval:
 
 
 def test_weights_eval(
-    eval: Eval, l: Layer, new_w: np.array, d_threshold: float = 0.001
+    eval: Eval, l: Layer, new_w: np.ndarray, d_threshold: float = 0.001
 ):
     default_w = l.kernel.numpy()
     l.set_weights([new_w, l.bias.numpy()])
@@ -33,7 +33,7 @@ def test_weights_eval(
 @dataclass
 class PruningStructure:
     transform_mask: Callable[
-        [np.array, tuple[int, int, int, int]], np.array
+        [np.ndarray, tuple[int, int, int, int]], np.ndarray
     ] = lambda k, shape: k
     reduce_ker: Callable = lambda x: x
 
@@ -44,7 +44,7 @@ class FixedLoss:
     decomp_weight_func: Callable[float, float] = lambda x: x
     spar_weight_func: Callable[float, float] = lambda x: 4 * x
     inv_spar_weight_func: Callable[float, float] = lambda x: x / 4
-    eval_func: Callable[[Eval, Layer, np.array], bool] = test_weights_eval
+    eval_func: Callable[[Eval, Layer, np.ndarray], bool] = test_weights_eval
 
 
 @dataclass
@@ -54,7 +54,7 @@ class FixedParams:
     decomp_weight_func: Callable[float, float] = lambda x: x
     spar_weight_func: Callable[float, float] = lambda x: x * 4
     inv_spar_weight_func: Callable[float, float] = lambda x: x / 4
-    eval_func: Callable[[Eval, Layer, np.array], float] = lambda e, l, k: np.mean(
+    eval_func: Callable[[Eval, Layer, np.ndarray], float] = lambda e, l, k: np.mean(
         (l.kernel.numpy() - k) ** 2
     )
 
@@ -71,7 +71,7 @@ def get_props(c: int):
 
 
 def get_decomp(
-    k: np.array,
+    k: np.ndarray,
     structure: PruningStructure,
     modes: tuple[int, int] = (2, 3),
     rank: int = 1,
@@ -94,7 +94,7 @@ def get_decomp(
 
 
 def get_whatif(
-    k: np.array,
+    k: np.ndarray,
     structure: PruningStructure,
     modes: tuple[int, int] = (2, 3),
     rank: int = 1,
@@ -115,7 +115,7 @@ def get_whatif(
 def find_sparsity(
     l: Layer,
     eval: Eval,
-    default_w: np.array,
+    default_w: np.ndarray,
     spar_limit: float,
     rank: int,
     fl: FixedLoss,
@@ -171,16 +171,21 @@ def find_compression_loss(l: Layer, eval: Eval, fl: FixedLoss):
     return best_w, best_pair
 
 
-def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
+def find_compression_params(
+    l: Layer, eval: Eval, fp: FixedParams, use_optimisation: bool = False
+) -> tuple[np.ndarray, tuple[int, float]]:
     default_w = l.kernel.numpy()
-    ranks = get_props(default_w.shape[-1])
+    ranks = get_props(default_w.shape[-1])[:: (-1 if use_optimisation else 1)]
     min_loss = 1e31
     best_pair = 0, 100
     best_w = default_w
     for i, rank in enumerate(ranks):
         prop_w = fp.decomp_weight_func(get_decomp_weight(l, rank) / get_weight(l))
         if prop_w > fp.weight_dict[l]:
-            break
+            if use_optimisation:
+                continue
+            else:
+                break
         eval.pbar.write(f"Testing Rank: {rank}...", end=" ")
         spar = fp.inv_spar_weight_func(fp.weight_dict[l] - prop_w) * 100
         new_k = get_whatif(default_w, fp.pruning_structure, rank=rank, spar=100 - spar)
@@ -192,13 +197,15 @@ def find_compression_params(l: Layer, eval: Eval, fp: FixedParams):
             eval.pbar.write(f"Yes, sparsity: {spar:.2f}.")
         else:
             eval.pbar.write("No.")
+            if use_optimisation:
+                break
     eval.pbar.write(
         f"Best pair: decomposition = {best_pair[0]}, sparsity = {best_pair[1]:2f}%"
     )
     return best_w, best_pair
 
 
-def find_rank_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.array, int]:
+def find_rank_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.ndarray, int]:
     k = l.kernel.numpy()
     c = k.shape[-1]
     ranks = get_props(c)
@@ -216,7 +223,7 @@ def find_rank_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.array, int]:
     return best_w, best_rank
 
 
-def find_spar_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.array, float]:
+def find_spar_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.ndarray, float]:
     k = l.kernel.numpy()
     spars = [i for i in range(1, 100) if i < fl.inv_spar_weight_func(100)]
     min_idx, max_idx = 0, len(spars) - 1
@@ -237,7 +244,7 @@ def get_weight(layer: tf.keras.layers.Conv2D) -> float:
     return np.prod(np.array(layer.kernel.shape)) * np.prod(layer.output_shape[1:-1])
 
 
-def get_weights(conv_idx: list[int], model: tf.keras.Model) -> np.array:
+def get_weights(conv_idx: list[int], model: tf.keras.Model) -> np.ndarray:
     weight_arr = np.array([get_weight(model.layers[i]) for i in conv_idx])
     return weight_arr / np.sum(weight_arr)
 
@@ -314,7 +321,7 @@ def get_spr_weights(k, modes=(2, 3), rank=1, spar=90):
     return b
 
 
-def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.array, int]:
+def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.ndarray, int]:
     if len(modes) != 2 and len(modes) != 1:
         raise Exception(f"Modes doesn't make sense: {modes}")
     (core, factors), _ = partial_tucker(

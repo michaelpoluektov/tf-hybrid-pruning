@@ -21,7 +21,7 @@ def find_factors(
     layers: list[K.layers.Layer],
     eval: Eval,
     fs: LP,
-    func: Callable[[K.layers.Layer, Eval, LP], tuple[np.array, COMP]],
+    func: Callable[[K.layers.Layer, Eval, LP], tuple[np.ndarray, COMP]],
 ) -> dict[K.layers.Layer, COMP]:
     comp_dict = {}
     for l in layers:
