@@ -28,10 +28,12 @@ def get_resnet(ws_path=None):
     return base_model, model
 
 
-def _decomp_resnet(ranks):
+def _decomp_resnet(ranks, spars):
     ins = tf.keras.layers.Input(shape=(32, 32, 3))
     x = tf.keras.layers.UpSampling2D(size=(7, 7), interpolation="bilinear")(ins)
-    x = ResNet50(ranks=ranks, include_top=False, weights=None, input_tensor=x)
+    x = ResNet50(
+        ranks=ranks, spars=spars, include_top=False, weights=None, input_tensor=x
+    )
     x = tf.keras.layers.GlobalAveragePooling2D()(x)
     x = tf.keras.layers.Dropout(0.25)(x)
     x = tf.keras.layers.Dense(256, activation="relu")(x)
@@ -42,7 +44,7 @@ def _decomp_resnet(ranks):
 
 
 def get_decomp_resnet(ranks, ps, spars, ws_path):
-    model = _decomp_resnet(ranks)
+    model = _decomp_resnet(ranks, spars)
     name_set = set([l.name for l in model.layers])
     base_model, model2 = get_resnet(ws_path)
     bias3 = [
@@ -63,8 +65,9 @@ def get_decomp_resnet(ranks, ps, spars, ws_path):
         model.get_layer(l.name + "_first").set_weights([np.expand_dims(first, [0, 1])])
         model.get_layer(l.name + "_core").set_weights([core])
         model.get_layer(l.name + "_last").set_weights([np.expand_dims(last.T, [0, 1])])
-        model.get_layer(l.name + "_sp").set_weights([sp, l.bias.numpy()])
-        name_set.remove(l.name + "_sp")
+        if spar:
+            model.get_layer(l.name + "_sp").set_weights([sp, l.bias.numpy()])
+            name_set.remove(l.name + "_sp")
         name_set.remove(l.name + "_first")
         name_set.remove(l.name + "_core")
         name_set.remove(l.name + "_last")

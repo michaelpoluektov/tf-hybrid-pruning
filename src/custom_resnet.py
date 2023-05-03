@@ -110,7 +110,7 @@ def ResNet(
 
 
 # New function not present in original code
-def tucker_conv2d(x, filters, rank, kernel_size=3, name=None):
+def tucker_conv2d(x, filters, rank, spar, kernel_size=3, name=None):
     if rank == 0:
         return layers.Conv2D(filters, kernel_size, padding="SAME", name=name)(x)
     t = layers.Conv2D(
@@ -137,12 +137,24 @@ def tucker_conv2d(x, filters, rank, kernel_size=3, name=None):
         kernel_initializer="zeros",
         use_bias=False,
     )(t)
-    s = layers.Conv2D(filters, kernel_size, padding="SAME", name=name + "_sp")(x)
-    x = layers.Add()([s, t])
-    return x
+    if spar:
+        s = layers.Conv2D(filters, kernel_size, padding="SAME", name=name + "_sp")(x)
+        x = layers.Add()([s, t])
+        return x
+    else:
+        return t
 
 
-def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None, rank=1):
+def block1(
+    x,
+    filters,
+    kernel_size=3,
+    stride=1,
+    conv_shortcut=True,
+    name=None,
+    rank=1,
+    spar=0,
+):
     bn_axis = 3 if backend.image_data_format() == "channels_last" else 1
 
     if conv_shortcut:
@@ -161,7 +173,7 @@ def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None, r
     )
     x = layers.Activation("relu", name=name + "_1_relu")(x)
 
-    x = tucker_conv2d(x, filters, rank, kernel_size, name=name + "_2_conv")
+    x = tucker_conv2d(x, filters, rank, spar, kernel_size, name=name + "_2_conv")
     # x = layers.Conv2D(filters, kernel_size, padding="SAME", name=name + "_2_conv")(x)
     x = layers.BatchNormalization(axis=bn_axis, epsilon=1.001e-5, name=name + "_2_bn")(
         x
@@ -178,8 +190,10 @@ def block1(x, filters, kernel_size=3, stride=1, conv_shortcut=True, name=None, r
     return x
 
 
-def stack1(x, filters, blocks, ranks, stride1=2, name=None):
-    x = block1(x, filters, stride=stride1, name=name + "_block1", rank=ranks[0])
+def stack1(x, filters, blocks, ranks, spars, stride1=2, name=None):
+    x = block1(
+        x, filters, stride=stride1, name=name + "_block1", rank=ranks[0], spar=spars[0]
+    )
     for i in range(2, blocks + 1):
         x = block1(
             x,
@@ -187,12 +201,14 @@ def stack1(x, filters, blocks, ranks, stride1=2, name=None):
             conv_shortcut=False,
             name=name + "_block" + str(i),
             rank=ranks[i - 1],
+            spar=spars[i - 1],
         )
     return x
 
 
 def ResNet50(
     ranks,
+    spars=None,
     include_top=True,
     weights="imagenet",
     input_tensor=None,
@@ -201,11 +217,14 @@ def ResNet50(
     classes=1000,
     **kwargs,
 ):
+    if not spars:
+        spars = [0 for _ in ranks]
+
     def stack_fn(x):
-        x = stack1(x, 64, 3, ranks[0:3], stride1=1, name="conv2")
-        x = stack1(x, 128, 4, ranks[3:7], name="conv3")
-        x = stack1(x, 256, 6, ranks[7:13], name="conv4")
-        return stack1(x, 512, 3, ranks[13:16], name="conv5")
+        x = stack1(x, 64, 3, ranks[0:3], spars[0:3], stride1=1, name="conv2")
+        x = stack1(x, 128, 4, ranks[3:7], spars[3:7], name="conv3")
+        x = stack1(x, 256, 6, ranks[7:13], spars[7:13], name="conv4")
+        return stack1(x, 512, 3, ranks[13:16], spars[13:16], name="conv5")
 
     return ResNet(
         stack_fn,

@@ -143,18 +143,21 @@ def find_compression_params(
 def find_rank_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.ndarray, int]:
     k = l.kernel.numpy()
     c = k.shape[-1]
-    ranks = get_props(c)
+    ranks = [i for i in range(c * 13 // 16)]
     min_idx, max_idx = 0, len(ranks) - 1
     best_w, best_rank = k, 0
     while max_idx - min_idx > 1:
-        cur_idx = (max_idx - min_idx) // 2
+        cur_idx = (max_idx + min_idx) // 2
         rank = ranks[cur_idx]
         new_w = get_compressed_weights(l, rank=rank)
         if fl.eval_func(eval, l, new_w):
-            best_w, best_rank = k, rank
+            best_w, best_rank = new_w, rank
             max_idx = cur_idx
+            eval.pbar.write(f"Rank {rank} works.")
         else:
             min_idx = cur_idx
+            eval.pbar.write(f"Rank {rank} does not work.")
+    eval.pbar.write(f"Found rank: {best_rank}")
     return best_w, best_rank
 
 
@@ -164,14 +167,17 @@ def find_spar_loss(l: Layer, eval: Eval, fl: FixedLoss) -> tuple[np.ndarray, flo
     min_idx, max_idx = 0, len(spars) - 1
     best_w, best_spar = k, 100
     while max_idx - min_idx > 1:
-        cur_idx = (max_idx - min_idx) // 2
+        cur_idx = (max_idx + min_idx) // 2
         spar = spars[cur_idx]
-        new_w = get_whatif(k, fl.pruning_structure, rank=0, spar=spar)
+        new_w = get_whatif(k, fl.pruning_structure, rank=0, spar=100 - spar)
         if fl.eval_func(eval, l, new_w):
-            best_w, best_spar = k, spar
+            best_w, best_spar = new_w, spar
             max_idx = cur_idx
+            eval.pbar.write(f"Sparsity {spar} works.")
         else:
             min_idx = cur_idx
+            eval.pbar.write(f"Sparsity {spar} does not work.")
+    eval.pbar.write(f"Found sparsity: {best_spar}")
     return best_w, best_spar
 
 
@@ -251,6 +257,8 @@ def decomp_only_stats(l, eval):
 
 
 def get_compressed_weights(layer, modes=(2, 3), rank=1) -> tuple[np.ndarray, int]:
+    if isinstance(rank, int):
+        rank = (rank, rank)
     if len(modes) != 2 and len(modes) != 1:
         raise Exception(f"Modes doesn't make sense: {modes}")
     (core, factors), _ = partial_tucker(

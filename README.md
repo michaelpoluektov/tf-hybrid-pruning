@@ -106,6 +106,10 @@ Run `python scripts/compress.py --help` for more arguments and usage information
 
 ### REPORT
 
-- Examples
+- Examples for usage
+- Compare to similar papers
+- Add more stuff about tensor decompositions in general
+- Explain activation sparsity in decompositions
+- Update dirtree
 - Change outdated naive results
 - ReLU in DeepDream plots

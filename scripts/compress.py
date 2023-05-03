@@ -5,7 +5,7 @@ sys.path.append("../src")
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import argparse
-from pruning import find_factors_loss, find_factors_params
+from pruning import find_factors_loss, find_factors_params, find_single_loss
 from model import get_resnet, get_decomp_resnet
 from dataset import get_dataset
 from utils import (
@@ -97,7 +97,17 @@ def parse_args():
         default="hybrid",
         help="Compression method",
     )
+    parser.add_argument(
+        "--dataset_size",
+        type=int,
+        default=313,
+        help="Size of dataset for fixed_loss method",
+    )
     args = parser.parse_args()
+    if args.dataset_size < 1 or args.dataset_size > 313:
+        parser.error(
+            f"--dataset_size must be between 1 and 313, got {args.dataset_size}"
+        )
     if args.pruning_structure == "block" and args.block_size is None:
         parser.error("--block_size must be provided when using block pruning structure")
     if args.method == "fixed_loss" and args.max_acc_loss is None:
@@ -155,7 +165,7 @@ def compression(
     comp_dict_func: Callable[
         [Model, list[Layer], Eval, FP], dict[Layer, tuple[int, float]]
     ],
-):
+) -> list[tuple[int, float]]:
     layers = get_layers(base_model)
     test_ds, val_ds = get_dataset(False, 224, 1, 16, True)
     print("Evaluating model...", end=" ")
@@ -164,7 +174,7 @@ def compression(
     print(f"Accuracy: val={val_accuracy*100:.2f}%, test={test_accuracy*100:.2f}%")
     ev = Eval(
         model=model,
-        ds=test_ds,
+        ds=test_ds.take(args.dataset_size),
         pbar=tqdm(total=len(layers)),
         base_accuracy=test_accuracy,
     )
@@ -175,14 +185,19 @@ def compression(
         + f"={(test_accuracy - ev.base_accuracy)*100:.2}%, "
         + f"val={(val_accuracy-new_val)*100:.2f}%"
     )
+    if args.compression_type == "tucker":
+        comp_dict = {l: (comp_dict[l], 0 if comp_dict[l] else 100) for l in comp_dict}
+    elif args.compression_type == "spars":
+        comp_dict = {l: (0, comp_dict[l]) for l in comp_dict}
     print("FACTORS:")
     for l in comp_dict:
+        print_string = f"{l.name}: "
         r, s = comp_dict[l]
-        print(
-            f"{l.name}: rank={r} "
-            + f"({fp.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%), "
-            + f"sparsity={s:.2f}% ({fp.spar_weight_func(s):.2f}%)"
-        )
+        if args.compression_type == "tucker" or args.compression_type == "hybrid":
+            print_string += f"rank={r} ({fp.decomp_weight_func(get_decomp_weight(l, r) / get_weight(l))*100:.2f}%) "
+        if args.compression_type == "spars" or args.compression_type == "hybrid":
+            print_string += f"sparsity={s:.2f}% ({fp.spar_weight_func(s):.2f}%)"
+        print(print_string)
     pairs = [comp_dict[l] for l in layers]
     return pairs
 
@@ -194,7 +209,13 @@ def fixed_loss(model, ps, base_model, args):
         inv_spar_weight_func=lambda x: x / args.sparsity_weight,
         spar_weight_func=lambda x: args.sparsity_weight * x,
     )
-    return compression(model, ps, base_model, args, fl, find_factors_loss)
+    if args.compression_type == "hybrid":
+        func = find_factors_loss
+    elif args.compression_type == "tucker":
+        func = lambda i, j, k, l: find_single_loss(i, j, k, l, "tucker")
+    else:
+        func = lambda i, j, k, l: find_single_loss(i, j, k, l, "spar")
+    return compression(model, ps, base_model, args, fl, func)
 
 
 def fixed_params(model, ps, base_model, args):
@@ -208,18 +229,8 @@ def fixed_params(model, ps, base_model, args):
         inv_spar_weight_func=lambda x: x / args.sparsity_weight,
         spar_weight_func=lambda x: args.sparsity_weight * x,
     )
-    if args.compression_type == "hybrid":
-        func = find_factors_params
-    elif args.compression_type == "tucker":
-        func = find_rank_loss
-    else:
-        func = find_spar_loss
-    ret_dict = compression(model, ps, base_model, args, fp, func)
-    if args.compression_type == "tucker":
-        ret_dict = {l: (ret_dict[l], 0) for l in ret_dict}
-    elif args.compression_type == "spar":
-        ret_dict = {l: (0, ret_dict[l]) for l in ret_dict}
-    return ret_dict
+    func = find_factors_params
+    return compression(model, ps, base_model, args, fp, func)
 
 
 def main(args):
