@@ -107,7 +107,7 @@ def find_compression_loss(l: Layer, eval: Eval, fl: FixedLoss):
 
 
 def find_compression_params(
-    l: Layer, eval: Eval, fp: FixedParams, use_optimisation: bool = False
+    l: Layer, eval: Eval, fp: FixedParams, use_optimisation: bool = True
 ) -> tuple[np.ndarray, tuple[int, float]]:
     default_w = l.kernel.numpy()
     ranks = get_props(default_w.shape[-1])[:: (-1 if use_optimisation else 1)]
