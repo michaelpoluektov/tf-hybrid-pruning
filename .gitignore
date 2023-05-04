@@ -135,8 +135,9 @@ dmypy.json
 model.png
 cifar/layers
 *.pgf
-*.pickle
 *.JPEG
 *.jpeg
 *.jpg
 *.tflite
+*.pickle
+linux_x86-64_benchmark_model_plus_flex

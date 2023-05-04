@@ -16,6 +16,7 @@ from tensorly.tenalg import multi_mode_dot
 from math import sqrt
 import numpy as np
 from structures import PruningStructure
+from typing import Union
 
 
 def initialize_tucker(
@@ -42,14 +43,14 @@ def initialize_tucker(
 
 
 def partial_tucker_spar(
-    tensor,
-    rank,
-    modes=(2, 3),
-    spar=90,
+    tensor: np.ndarray,
+    rank: Union[int, tuple[int, int]],
+    modes: tuple[int, int] = (2, 3),
+    spar: int = 90,
     ps: PruningStructure = PruningStructure(),
-    n_iter_max=100,
-    tol=1e-3,
-    svd_mask_repeats=5,
+    n_iter_max: int = 100,
+    tol: float = 1e-3,
+    svd_mask_repeats: int = 5,
 ):
     if isinstance(rank, int):
         rank = (rank, rank)

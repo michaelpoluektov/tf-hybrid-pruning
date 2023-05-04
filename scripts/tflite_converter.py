@@ -1,4 +1,6 @@
 import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 import tensorflow as tf
 import argparse
 
@@ -39,7 +41,7 @@ def parse_args():
     args.output_path = os.path.abspath(args.output_path)
     if not os.path.exists(args.input_path):
         parser.error(f"Input path '{args.input_path}' does not exist")
-    if not args.input_path[-3:] != ".h5":
+    if args.input_path[-3:] != ".h5":
         parser.error(
             f"Input path should point to SavedModel in H5 format, got {args.input_path}"
         )

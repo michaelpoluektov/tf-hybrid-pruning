@@ -16,7 +16,8 @@ mixed_precision.set_global_policy("mixed_float16")
 
 PREFIX = "../models/keras/resnet"
 FINETUNES = ["bn_finetune", "l1"]
-STRUCTS = ["block_8x8", "channel", "filter", "unstruct"]
+# STRUCTS = ["block_8x8", "channel", "filter", "unstruct"]
+STRUCTS = ["tucker"]
 NUMS = ["0.02", "0.04", "0.06", "0.08", "0.10"]
 BLOCKS = [
     "conv2_block1_2_conv",
@@ -44,7 +45,7 @@ for ft in FINETUNES:
     for st in STRUCTS:
         for n in NUMS:
             model_dict = {}
-            pth = f"{PREFIX}_{ft}_{st}_{n}_fp.h5"
+            pth = f"{PREFIX}_{ft}_{st}_{n}.h5"
             model = tf.keras.models.load_model(pth, compile=False)
             lnames = [l.name for l in model.layers]
             for b in BLOCKS:
@@ -75,6 +76,6 @@ for ft in FINETUNES:
             model_dict["val_acc"] = val_acc
             pbar.update(1)
 
-with open("stats_dict_fp.pickle", "wb") as f:
+with open("stats_dict_tucker.pickle", "wb") as f:
     pickle.dump(total_dict, f)
 print(total_dict)
