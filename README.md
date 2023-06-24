@@ -1,6 +1,6 @@
 ### A note on model checkpoints
 
-I got an email today (24.06.2023) that I ran out of LFS storage, in case you're actually using this repository and need the checkpoints, feel free to email me and I'll think of something.
+I got an email today (24.06.2023) that I ran out of LFS bandwidth, in case you're actually using this repository and need the checkpoints, feel free to email me and I'll think of something.
 
 # tf-hybrid-pruning
 
